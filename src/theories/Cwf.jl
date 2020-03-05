@@ -1,298 +1,164 @@
-export cwf
+export cwf,compcomp
 
-using AlgebraicTypeTheory: SortOp, Sort, TermOp, Var, OpDecl, SortDecl, App, EqDecl, mkTheory, Judgment,render
+using AlgebraicTypeTheory: SortOp, Sort, TermOp, Var, OpDecl, SortDecl, App, EqDecl, mkTheory, Judgment,render, apply_rewrite, extend
 
-
+############
+# CONTEXTS #
+############
 ctx, siz, Hom = [SortOp(x,i) for (x,i) in zip([:Ctx,:size, :Hom],[0,0,"({}→{})"])]
 Ctx,Size = map(Sort,[ctx,siz])
 α,β,θ,A,B,C,D,Γ,Δ,Ξ = [Var(x,Ctx) for x in [:α,:β,:θ,:A,:B,:C,:D,:Γ,:Δ,:Ξ]]
 
 Hom_aa,Hom_bb,Hom_ab,Hom_bc,Hom_ac,Hom_cd,Hom_αα,Hom_ββ,Hom_αβ,Hom_αθ,Hom_βθ,Hom_ΔΓ,HomΞΔ = [Sort(Hom, x) for x in [ [A,A],[B,B],[A,B],[B,C],[A,C],[C,D],[α,α],[β,β],[α,β],[α,θ],[β,θ],[Δ,Γ],[Ξ,Δ]]]
 
-ctxdecl = SortDecl(Ctx,"Ctxjects of a category are a convenience to make it easier to talk about morphisms.")
-homdecl = SortDecl(Hom_αβ, [α,β], "Hom-set, a set of morphisms which exists between any pair of ctxjects in a category.")
+ctxdecl = SortDecl(Ctx,"""Contexts: Concretely, a mapping xᵢ:Xᵢ of free variables to types.
+                          Consider these as objects in a category C.""")
+homdecl = SortDecl(Hom_αβ, [α,β], "Substitutions between contexts: concretely, a substitution bᵢ:βᵢ↦aᵢ:αᵢ.
+                                   Consider these as morphisms in the category C.")
 id = TermOp(:id,1)
-iddecl = OpDecl(id, Hom_αα, [α], "The identity operation picks out a particular morphism in Hom(α,α) which satisfies the identity laws.")
-Cmp = TermOp(:⋅,"binary")
-Cmpdecl = OpDecl(Cmp,Hom_αθ,[Hom_αβ,Hom_βθ], "Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.")
+iddecl = OpDecl(id, Hom_αα, [α], "An identity substitution aᵢ:αᵢ↦aᵢ:αᵢ.")
 f,g,h,γ,δ = [Var(x,h) for (x,h) in zip([:f,:g,:h,:γ,:δ],[Hom_ab,Hom_bc,Hom_cd,Hom_ΔΓ,HomΞΔ])]
+Cmp = TermOp(:⋅,"binary")
+Cmpdecl = OpDecl(Cmp,Hom_ac,[f,g], "Composition of substitutions, only defined for pairs that match contexts head-to-tail, is an associative operation which yields a third substitution.")
 fg, gh = [App(Cmp,x) for x in [[f,g],[g,h]]]
 idA,idB,idΓ = [App(id,[x]) for x in [A,B,Γ]]
 f_gh, fg_h = [App(Cmp,x) for x in [[fg,h],[f,gh]]]
 
-idldecl = EqDecl("⋅ left-identity", App(Cmp,[idA,f]), f)
-idrdecl = EqDecl("⋅ right-identity", App(Cmp,[f,idB]), f)
+idldecl = EqDecl("⋅ left-identity", f, App(Cmp,[idA,f]))
+idrdecl = EqDecl("⋅ right-identity", f, App(Cmp,[f,idB]))
 ascdecl = EqDecl("⋅ associativity", f_gh, fg_h)
 
+category = mkTheory("category", Judgment[ctxdecl, homdecl, iddecl, Cmpdecl,
+                                         idldecl, idrdecl, ascdecl])
+
+####################
+# TERMINAL CONTEXT #
+####################
+
 Emp = TermOp(:emp,"⋅")
-empdecl = OpDecl(Emp,Ctx,"The category ctx has a terminal object")
+empdecl = OpDecl(Emp,Ctx,"The category C has a terminal object: the empty context")
 emp = App(Emp)
 Trm = TermOp(:empsubst,"!({})")
 termsort = Sort(Hom,[Γ,emp])
 termΓ = App(Trm,[Γ])
 anyTermΓ = Var(:η,termsort)
 termdecl=OpDecl(Trm,termsort,[Γ])
-termundecl = EqDecl("! unique",termΓ, anyTermΓ, "The terminal morphism is unique")
+termundecl = EqDecl("! unique",termΓ, anyTermΓ, "The unique substitution into an empty context.")
 
-sizedecl = SortDecl(Size,"Data is ordered by its size")
-zero,one = [TermOp(Symbol(x),x) for x in ["0", "1"]]
-One = App(one)
-small, large = [OpDecl(x,Size) for x in [zero, one]]
-ord = SortOp(:≦,"binary")
-i,j,k = [Var(x,Size) for x in [:i,:j,:k]]
-ii,ij,jk,ik,i1,ki = [Sort(ord,x) for x in
-    [[i,i], [i,j], [j,k], [i,k],[i,One],[k,i]]]
-orddec = SortDecl(ij,[i,j])
-vii,p,q,r,s = [Var(x,y) for (x,y) in zip([:m,:p,:q,:r,:s],[ii,ij,ij,jk,ik])]
+c_t = extend(category, Judgment[empdecl, termdecl, termundecl], "c+t")
 
-ordunidecl = EqDecl("Ord unique",p,q,"The sort i≦j is a singleton")
-sizerefl = TermOp(:★i,"{}")
-sizerefldec = OpDecl(sizerefl, ii,[i], "≦ reflexivity")
-sizetran = TermOp(:★t,2)
-OneRefl = App(sizerefl,[One])
-sizetrandec = OpDecl(sizetran,ik,[p,Var(:r,jk)],"≦ transitivity")
-sizemax = TermOp(:★m,1)
-sizemaxdec = OpDecl(sizemax,i1,[i],"Everything is less than 1")
-sizemaxdec2=EqDecl("1 max",i,One,"One is bigger than everything",[Var(:p,ki)])
+###############
+# TYPE LEVELS #
+###############
+Size = Sort(SortOp(:lvl))
+sizedecl = SortDecl(Size,"Hierarchy of type universes")
+zero = TermOp(Symbol("0"))
+Zero = App(zero)
+zerodecl = OpDecl(zero, Size)
+α, β, α′ = [Var(x,Size) for x in [:α,:β,:α′]]
 
+suc = TermOp(:suc,"{}+1")
+sucdecl = OpDecl(suc, Size, [α])
+ord = SortOp(Symbol("<"),"binary")
+αβ,αα′,α′β, = [Sort(ord,x) for x in [[α,β],[α,α′],[α′,β]]]
+orddec = SortDecl(αβ,[α,β], "Strict ordering of type hierarchy")
+p,p′,q,r = [Var(x,y) for (x,y) in zip([:p,:p′,:q,:r],[αβ,αβ,αα′,α′β])]
+
+ltz = TermOp(:ltz, "0 < {}+1")
+ltzdecl = OpDecl(ltz,Sort(ord,[Zero,App(suc,[α])]), [α])
+lts = TermOp(:lts, "{1} < {1}+1")
+ltsdecl = OpDecl(lts,Sort(ord,[α,App(suc,[α])]),[α])
+ltlift = TermOp(:ltlift, "{}+1 < {}+1")
+ltldecl = OpDecl(ltlift, Sort(ord,[App(suc,[α]),App(suc,[β])]), [α,β])
+
+ordunidecl = EqDecl("Ord unique",p,p′,"The sort α<β is a singleton")
+sizetran = TermOp(:⪡,"binary")
+sizetrandec = OpDecl(sizetran,αβ,[q,r],"< transitivity")
+
+level = mkTheory("level", Judgment[sizedecl, sucdecl, zerodecl, orddec,
+                ltzdecl,ltsdecl,ltldecl,ordunidecl,sizetrandec])
+c_t_l = extend(c_t, level, "c_t_l")
+
+######################
+# TYPES AND ELEMENTS #
+######################
 Ty = SortOp(:Ty, "Ty{}({})")
-TyΓi,TyΔj = [Sort(Ty, [i,Γ]), Sort(Ty,[j,Δ])]
+TyΓα,TyΔα = [Sort(Ty, [α,Γ]), Sort(Ty,[α,Δ])]
+AyΓα, ByΔα = [Var(:A, TyΓα), Var(:B,TyΔα)]
+Tydecl = SortDecl(TyΓα, [α,Γ], "The sort of types in context Γ (of size α)")
 
-Tydecl = SortDecl(TyΓi, [i,Γ], "Size lifting action?Presheaf Γ×sizeᵒᵖ")
+El = SortOp(:el, "𝐄𝐥({}⊢{})")
+elΓA = Sort(El,[Γ,AyΓα])
+Eldecl = SortDecl(elΓA, [Γ, AyΓα], "The sort of terms of type A (in ctx Γ), where A is of size α
+ 'This is to fix a dependent presheaf El: Psh(ctx)/Tyα, i.e. a nat. trans. π: El→Tyα'")
 
-AyΓi, ByΔj = [Var(:A, TyΓi), Var(:B,TyΔj)]
-Tyact = TermOp(:Tyact,"({}[{}]{})")
-Tyactdecl = OpDecl(Tyact,TyΔj,[AyΓi, γ, p], "Substitution action")
+Tyact = TermOp(:Tyact,"{}[{}]")
+Tyactdecl = OpDecl(Tyact,TyΔα,[AyΓα, γ],
+        "Substitution action: apply the substitution γ (of type Δ→Γ) to a some type A (in ctx Γ) to obtain a term of type Δ")
 
-tyfunc1decl = EqDecl("Ty functorality 1",AyΓi,App(Tyact,[AyΓi,idΓ,vii]),
-                     "functorality of Ty rule 1")
+tyfunc1decl = EqDecl("Ty identity",AyΓα,App(Tyact,[AyΓα,idΓ]),
+                     "Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type")
 
-t2t1 = App(Tyact,[AyΓi,App(Cmp,[δ,γ]),s])
-t2t2_ = App(Tyact,[AyΓi,γ,p])
-t2t2 = App(Tyact,[t2t2_,δ,r])
-var = Var(:Z,Sort(Ty,[j,Δ]))
-# The Tyact prototypical i is getting bound to i in the inner
-# and to j in the outer. How to deal with this? Need big change.
+δγ = App(Cmp,[δ,γ])
+t2t1 = App(Tyact,[AyΓα,δγ])
+t2t2_ = App(Tyact,[AyΓα,γ])
+t2t2 = App(Tyact,[t2t2_,δ])
 
-tyfunc2decl = EqDecl("Ty functorality 2", t2t1,t2t2,
-                     "functorality of Ty rule 2",[p,r])
+tyfunc2decl = EqDecl("Ty preserves composition", t2t1,t2t2,
+     """The functor to Fam from C preserves composition of substitutions:
+        applying two substitutions in sequence is the same as applying the composition of the substitutions in C""")
 
-
-
-El = SortOp(:el, "𝐄𝐥({} ⊢ {})")
-AyΓ1 = Var(:A, Sort(Ty, [One,Γ]))
-elΓA = Sort(El,[Γ,AyΓ1])
-Eldecl = SortDecl(elΓA, [Γ, AyΓ1])
 Elact = TermOp(:Elact,"{}[{}]")
 M = Var(:M,elΓA)
-
-Aγ1 = App(Tyact,[AyΓ1,γ,OneRefl])
-Elactdecl = OpDecl(Elact,Aγ1,[M,γ])
-
-eliddecl=EqDecl("Elact id",App(Elact,[M,idΓ]),M)
-
-
-cwf = mkTheory("cwf", Judgment[ctxdecl, homdecl, iddecl, Cmpdecl, idldecl, idrdecl, ascdecl, empdecl, termdecl, termundecl,
-sizedecl,small,large,orddec,ordunidecl,sizerefldec,sizetrandec,sizemaxdec,sizemaxdec2,Tydecl, Tyactdecl, tyfunc1decl,tyfunc2decl,Eldecl,Elactdecl], true)
-
-"""
-Rendered theory
-
-###############################
-# ******* Theory: cwf ******* #
-###############################
-
-#########
-# Sorts #
-#########
-
-***
-i:size  Γ:Ctx
--------------   Ty
-Tyi(Γ)  sort
-
-Size lifting action?Presheaf Γ×sizeᵒᵖ
-
-
-***
-α:Ctx  β:Ctx
-------------   Hom
-(α→β)  sort
-
-Hom-set, a set of morphisms which exists between any pair of ctxjects in a category.
-
-
-***
-A:Ty1(Γ)  Γ:Ctx
----------------   el
-𝐄𝐥(Γ ⊢ A)  sort
-
-
-***
-
-----------   size
-size  sort
-
-Data is ordered by its size
-
-
-***
-i:size  j:size
---------------   ≦
-(i ≦ j)  sort
-
-
-***
-
----------   Ctx
-Ctx  sort
-
-Ctxjects of a category are a convenience to make it easier to talk about morphisms.
-
-
-##############
-# Operations #
-##############
-
-***
-
---------   1
-1 : size
-
-
-***
-
--------   emp
-⋅ : Ctx
-
-The category ctx has a terminal object
-
-
-***
-    i:size
----------------   ★m
-★m(i) : (i ≦ 1)
-
-Everything is less than 1
-
-
-***
-A:Tyi(Γ) i:size j:size p:(i ≦ j) Γ:Ctx Δ:Ctx γ:(Δ→Γ)
-----------------------------------------------------   Tyact
-                  (A[γ]p) : Tyj(Δ)
-
-Substitution action
-
-
-***
-    α:Ctx
--------------   id
-id(α) : (α→α)
-
-The identity operation picks out a particular morphism in Hom(α,α) which satisfies the identity laws.
-
-
-***
-  i:size
------------   ★i
-i : (i ≦ i)
-
-≦ reflexivity
-
-
-***
-A:Ty1(Γ) M:𝐄𝐥(Γ ⊢ A) Γ:Ctx Δ:Ctx γ:(Δ→Γ)
-----------------------------------------   Elact
-             M[γ] : (A[γ]1)
-
-
-***
-i:size j:size k:size p:(i ≦ j) r:(j ≦ k)
-----------------------------------------   ★t
-           ★t(p,r) : (i ≦ k)
-
-≦ transitivity
-
-
-***
-   Γ:Ctx
-------------   empsubst
-!(Γ) : (Γ→⋅)
-
-
-***
-   α:Ctx β:Ctx θ:Ctx
------------------------   ⋅
-((α→β) ⋅ (β→θ)) : (α→θ)
-
-Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.
-
-
-***
-
---------   0
-0 : size
-
-
-###################
-# Equality Axioms #
-###################
-
-***
-A:Tyi(Γ)  i:size  m:(i ≦ i)  Γ:Ctx
-----------------------------------   Ty functorality 1
-     A = (A[id(Γ)]m) : Tyi(Γ)
-
-functorality of Ty rule 1
-
-
-***
-i:size  k:size  p:(k ≦ i)
--------------------------   1 max
-      i = 1 : size
-
-One is bigger than everything
-
-
-***
- A:Ctx  B:Ctx  f:(A→B)
------------------------   ⋅ right-identity
-(f ⋅ id(B)) = f : (A→B)
-
-
-***
- A:Ctx  B:Ctx  f:(A→B)
------------------------   ⋅ left-identity
-(id(A) ⋅ f) = f : (A→B)
-
-
-***
-A:Tyi(Γ)  i:size  j:size  k:size  p:(i ≦ j)  r:(j ≦ k)  s:(i ≦ k)  Γ:Ctx  Δ:Ctx  Ξ:Ctx  γ:(Δ→Γ)  δ:(Ξ→Δ)
---------------------------------------------------------------------------------------------------------   Ty functorality 2
-                                 (A[(δ ⋅ γ)]s) = ((A[γ]p)[δ]r) : Tyk(Ξ)
-
-functorality of Ty rule 2
-
-
-***
-A:Ctx  B:Ctx  C:Ctx  D:Ctx  f:(A→B)  g:(B→C)  h:(C→D)
------------------------------------------------------   ⋅ associativity
-        ((f ⋅ g) ⋅ h) = (f ⋅ (g ⋅ h)) : (A→D)
-
-
-***
- Γ:Ctx  η:(Γ→⋅)
-----------------   ! unique
-!(Γ) = η : (Γ→⋅)
-
-The terminal morphism is unique
-
-
-***
-i:size  j:size  p:(i ≦ j)  q:(i ≦ j)
-------------------------------------   Ord unique
-          p = q : (i ≦ j)
-
-The sort i≦j is a singleton
-
-"""
+ElΔAγ = Sort(El,[Δ,App(Tyact,[AyΓα,γ])])
+
+Elactdecl = OpDecl(Elact,ElΔAγ,[M,γ],
+        """Substitution action: apply the substitution γ (of type Δ→Γ) to a term of type A (in ctx Γ)
+           Result: a term of type A[γ] (in ctx Δ)""")
+
+eliddecl=EqDecl("Term substitution identity", M, App(Elact, [M,idΓ]),
+                "The identity substitution on a term yields the same term")
+elcompdecl = EqDecl("Term substitution composition",
+                    App(Elact,[M,δγ]), App(Elact,[App(Elact,[M,γ]),δ]),
+                    """The functor to Fam from C preserves composition of substitutions:
+                       Applying two substitutions in sequence is the same as applying the composition of the substitutions in C""")
+
+typel = Judgment[Tydecl,Eldecl,Tyactdecl,
+           tyfunc1decl, tyfunc2decl, Elactdecl, eliddecl, elcompdecl]
+
+ctlt = extend(c_t_l,typel, "ctlt")
+
+#########################
+# CONTEXT COMPREHENSION #
+#########################
+ctxcmp = TermOp(:ext,"({}.{})")
+ΓA = App(ctxcmp, [Γ,AyΓα])
+ctxcmpdecl = OpDecl(ctxcmp, Ctx,[Γ,AyΓα],
+                    "Context compreshension operation")
+snoc = TermOp(:snoc,"⟨{},{}⟩")
+N = Var(:N, ElΔAγ)
+snocdecl = OpDecl(snoc,Sort(Hom,[Δ,ΓA]),[γ,N], "???")
+P = TermOp(:𝐩,1)
+Pdecl = OpDecl(P,Sort(Hom,[ΓA,Γ]),[AyΓα],"Projection function 'drop'???")
+Q = TermOp(:𝐪,1)
+TyAp = App(Tyact,[AyΓα,App(P,[AyΓα])])
+Qdecl = OpDecl(Q,Sort(El,[ΓA,TyAp]),[AyΓα], "Projection function 'var'???")
+
+peq = EqDecl("Universal property of 𝐩", γ, App(Cmp,[App(snoc,[γ,N]),App(P,[AyΓα])]))
+qeq = EqDecl("Universal property of 𝐪", N, App(Elact,[App(Q,[AyΓα]),App(snoc,[γ,N])]))
+pqeq = EqDecl("𝐩𝐪 property", App(id,[ΓA]),App(snoc,[App(P,[AyΓα]),App(Q,[AyΓα])]))
+
+
+
+
+ctx = Judgment[ctxcmpdecl,snocdecl,Pdecl,Qdecl,peq,qeq,pqeq]
+
+cwf = extend(ctlt,ctx,"ctltc")
+
+# WORKSHOP #
+cct1 = App(Cmp,[δ,App(snoc,[γ,N])])
+M = Var(:M,N.sort)
+cct2 = App(snoc,[App(Cmp,[δ,γ]), App(Elact,[M,δ])])
+# ct2 = infer(cwf,cct2.args[2])
+# ct2n = normalize(cwf,ct2)
+compcomp = EqDecl("Context comprehension composition",cct1,cct2)

@@ -20,8 +20,7 @@ tran_subterm = App(neg, [App(land, [App(Leq, [X,Y]), App(Leq, [X,Z])])])
 tran = EqDecl("≤ transitivity",
     App(top), App(lor, [tran_subterm, App(Leq, [X,Z])]))
 
-extension = mkTheory(Judgment[obdecl, leq, refl, tran])
-preorder = extend(boolalg, extension, "Preorder")
+preorder = extend(boolalg, Judgment[obdecl, leq, refl, tran], "Preorder")
 
 
 """

@@ -41,7 +41,7 @@ distand, distor = [EqDecl("$op1 $op2 distributivity",
     for (op1, op2) in [[land,lor], [lor,land]]]
 
 boolalg = mkTheory("BooleanAlgebra", Judgment[
-    booldec, negdec, landdec,   lordec, topdecl, botdecl, symand, symor, ascand,
+    booldec, negdec, landdec, lordec, topdecl, botdecl, symand, symor, ascand,
     ascor, idenand, idenor, absand, absor,distand, distor])
 
 

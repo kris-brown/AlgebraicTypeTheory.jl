@@ -1,9 +1,9 @@
 using AlgebraicTypeTheory: SortOp, Sort, TermOp, Var, OpDecl, SortDecl, App, EqDecl,
                 mkTheory, Judgment,render
-export monoid
+export monoid, Mul, Ob, eOp
 
 
-ob = SortOp(:ob)
+ob = SortOp(:Ob)
 Ob = Sort(ob)
 obdecl = SortDecl(Ob, "Underlying set of a monoid")
 
@@ -24,6 +24,7 @@ m_asc = EqDecl("mul associativity",
 
 monoid = mkTheory("Monoid", Judgment[obdecl, mul, m_id, m_idl, m_idr, m_asc])
 
+term = App(Mul,[App(Mul,[X,App(Mul,[Y,Z])]),X])
 """
 Rendered theory:
 
