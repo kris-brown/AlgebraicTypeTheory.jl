@@ -1,9 +1,9 @@
 using Test
 
-@testset "Build" begin
-  include("testbuild.jl")
+@testset "Graph" begin
+    include("testgraph.jl")
 end
 
-# @testset "Core" begin
-#   include("test.jl")
-# end
+@testset "Term" begin
+    include("testgraphterm.jl")
+end

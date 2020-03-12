@@ -1,49 +1,55 @@
-using AlgebraicTypeTheory: SortOp, Sort, TermOp, Var, OpDecl, SortDecl, App, EqDecl,
-                mkTheory, Judgment,render
-export boolalg
+module Boolean
+# export boolalg
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../DataTypes.jl")
+    include("../Core.jl")
+    using .DataTypes
+else
+    using DataTypes
+end
 
-bool = SortOp(:Bool)
-Bool = Sort(bool)
-booldec = SortDecl(Bool,"The underlying set of a boolean algebra")
+    bool = SortOp(:Bool)
+    Bool = Sort(bool)
+    booldec = SortDecl(Bool, "The underlying set of a boolean algebra")
 
-bX, bY, bZ, bα,bβ = [Var(x, Bool) for x in [:x, :y, :z,:α,:β]]
-top, bot = [TermOp(x) for x in [:⊤,:⊥]]
-topdecl = OpDecl(top,Bool,"Top element, x ∨ ¬x")
-botdecl = OpDecl(bot,Bool,"Bottom element, x ∧ ¬x")
+    bX, bY, bZ, bα, bβ = [Var(x, Bool) for x in [:x, :y, :z,:α,:β]]
+    top, bot = [TermOp(x) for x in [:⊤,:⊥]]
+    topdecl = OpDecl(top, Bool, "Top element, x ∨ ¬x")
+    botdecl = OpDecl(bot, Bool, "Bottom element, x ∧ ¬x")
 
-neg = TermOp(:¬, 1)
-negdec = OpDecl(neg, Bool, [bX])
+    neg = TermOp(:¬, 1)
+    negdec = OpDecl(neg, Bool, [bX])
 
-land, lor = [TermOp(x,"binary") for x in [:∧ , :∨]]
-landdec = OpDecl(land, Bool,[bα,bβ],"Meet/Greatest lower bound")
-lordec = OpDecl(lor, Bool,[bα,bβ],"Join/Least upper bound")
+    land, lor = [TermOp(x, "binary") for x in [:∧ , :∨]]
+    landdec = OpDecl(land, Bool, [bα,bβ], "Meet/Greatest lower bound")
+    lordec = OpDecl(lor, Bool, [bα,bβ], "Join/Least upper bound")
 
-absand, absor = [EqDecl(
+    absand, absor = [EqDecl(
     "$(op1.sym), $(op2.sym) absorption", bX,
-    App(op1, [bX, App(op2, [bX, bY])])) for (op1,op2) in
+    App(op1, [bX, App(op2, [bX, bY])])) for (op1, op2) in
     [[land,lor], [lor,land]]]
 
-idenand, idenor = [EqDecl(
+    idenand, idenor = [EqDecl(
     "$(op1.sym) identity", bX,
     App(op1, [bX, App(op2)])) for (op1, op2) in
     [[land,top], [lor,bot]]]
 
-symand, symor = [EqDecl("$op symmetry", App(op,[bX,bY]), App(op,[bY,bX]))
+    symand, symor = [EqDecl("$op symmetry", App(op, [bX,bY]), App(op, [bY,bX]))
                  for op in [land,lor]]
 
-ascand, ascor = [EqDecl("$op associativity",
-    App(op,[bX,App(op,[bY,bZ])]),App(op,[App(op,[bX,bY]),bZ]))
+    ascand, ascor = [EqDecl("$op associativity",
+    App(op, [bX,App(op, [bY,bZ])]),App(op, [App(op, [bX,bY]),bZ]))
     for op in [land, lor]]
 
-distand, distor = [EqDecl("$op1 $op2 distributivity",
-    App(op1,[bX,App(op2,[bY,bZ])]),
-    App(op2,[App(op1,[bX,bY]),App(op1,[bX,bZ])]))
+    distand, distor = [EqDecl("$op1 $op2 distributivity",
+    App(op1, [bX,App(op2, [bY,bZ])]),
+    App(op2, [App(op1, [bX,bY]),App(op1, [bX,bZ])]))
     for (op1, op2) in [[land,lor], [lor,land]]]
 
-boolalg = mkTheory("BooleanAlgebra", Judgment[
-    booldec, negdec, landdec, lordec, topdecl, botdecl, symand, symor, ascand,
-    ascor, idenand, idenor, absand, absor,distand, distor])
-
+    # boolalg = mkTheory("BooleanAlgebra", Judgment[
+    # booldec, negdec, landdec, lordec, topdecl, botdecl, symand, symor, ascand,
+    # ascor, idenand, idenor, absand, absor,distand, distor])
+end
 
 """
 Rendered Theory

@@ -1,5 +1,8 @@
 # # Categories with Families
 #
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../../../src/AlgebraicTypeTheory.jl")
+end
 
 using AlgebraicTypeTheory
-print(render(AlgebraicTypeTheory.Theories.cwf))
+# print(render(AlgebraicTypeTheory.Theories.cwf))

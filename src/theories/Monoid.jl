@@ -1,6 +1,12 @@
-using AlgebraicTypeTheory: SortOp, Sort, TermOp, Var, OpDecl, SortDecl, App, EqDecl,
-                mkTheory, Judgment,render
-export monoid, Mul, Ob, eOp
+module Monoid
+
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../DataTypes.jl")
+    include("../Core.jl")
+    using .DataTypes
+else
+    using DataTypes
+end
 
 
 ob = SortOp(:Ob)
@@ -12,7 +18,7 @@ m_id = OpDecl(eOp, Ob, "Identity element of monoid")
 
 Mul = TermOp(:mul, "({} * {})")
 mul = OpDecl(Mul, Ob, [Var(:α, Ob), Var(:β, Ob)])
-X,Y,Z = [Var(x, Ob) for x in [:X,:Y,:Z]]
+X, Y, Z = [Var(x, Ob) for x in [:X,:Y,:Z]]
 
 id_term = App(eOp)
 
@@ -20,11 +26,11 @@ m_idl = EqDecl("mul left-identity", X, App(Mul, [id_term, X]))
 m_idr = EqDecl("mul right-identity", X, App(Mul, [X, id_term]))
 
 m_asc = EqDecl("mul associativity",
-    App(Mul,[X,App(Mul,[Y,Z])]),App(Mul,[App(Mul,[X,Y]),Z]))
+    App(Mul, [X,App(Mul, [Y,Z])]),App(Mul, [App(Mul, [X,Y]),Z]))
 
-monoid = mkTheory("Monoid", Judgment[obdecl, mul, m_id, m_idl, m_idr, m_asc])
+# monoid = mkTheory("Monoid", Judgment[obdecl, mul, m_id, m_idl, m_idr, m_asc])
 
-term = App(Mul,[App(Mul,[X,App(Mul,[Y,Z])]),X])
+end
 """
 Rendered theory:
 

@@ -1,28 +1,33 @@
-using AlgebraicTypeTheory: extend
-using AlgebraicTypeTheory.Theories: boolalg, Bool,top, neg, land, lor
-export preorder
+module Preorder
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../DataTypes.jl")
+    include("../Core.jl")
+    using .DataTypes
+else
+    using DataTypes
+end
 
-############
-# Preorder #
-############
-ob = SortOp(:ob)
-Ob = Sort(ob)
-obdecl = SortDecl(Ob, "Underlying set of a preorder")
+# ############
+# # Preorder #
+# ############
+# ob = SortOp(:ob)
+# Ob = Sort(ob)
+# obdecl = SortDecl(Ob, "Underlying set of a preorder")
 
-X, Y, Z = [Var(x,Ob) for x in [:x, :y, :z]]
+# X, Y, Z = [Var(x, Ob) for x in [:x, :y, :z]]
 
-Leq = TermOp(:≤, "binary")
-leq = OpDecl(Leq, Bool, [X,Y])
-refl = EqDecl("≤ reflexivity", App(top), App(Leq, [X,X]))
+# Leq = TermOp(:≤, "binary")
+# leq = OpDecl(Leq, Bool, [X,Y])
+# refl = EqDecl("≤ reflexivity", App(top), App(Leq, [X,X]))
 
-tran_subterm = App(neg, [App(land, [App(Leq, [X,Y]), App(Leq, [X,Z])])])
+# tran_subterm = App(neg, [App(land, [App(Leq, [X,Y]), App(Leq, [X,Z])])])
 
-tran = EqDecl("≤ transitivity",
-    App(top), App(lor, [tran_subterm, App(Leq, [X,Z])]))
+# tran = EqDecl("≤ transitivity",
+#     App(top), App(lor, [tran_subterm, App(Leq, [X,Z])]))
 
-preorder = extend(boolalg, Judgment[obdecl, leq, refl, tran], "Preorder")
+# preorder = extend(boolalg, Judgment[obdecl, leq, refl, tran], "Preorder")
 
-
+end
 """
 Rendered Theory
 
