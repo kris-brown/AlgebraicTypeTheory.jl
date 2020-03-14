@@ -1,180 +1,63 @@
 module Preorder
-if isdefined(@__MODULE__, :LanguageServer)
-    include("../DataTypes.jl")
-    include("../Core.jl")
-    using .DataTypes
-else
-    using DataTypes
+export preorder
+using GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+
+obdecl = SortDecl(:ob, "Underlying set of preorder")
+A,B,C = [Var(x,Sort(:ob)) for x in [:A,:B,:C]]
+leqdecl = SortDecl(:leq,"({}≤{})",[A,B],"A relation from A -> B")
+aa,ab,bc,ac = [Sort(:leq,[x,y]) for (x,y) in [A=>A,A=>B,B=>C,A=>C]]
+p,q = [Var(x,y) for (x,y) in [:p=>ab,:q=>bc]]
+refl = OpDecl(:refl,"{}ᵣ",aa,[A],"Reflexivity")
+trans = OpDecl(:trans,"({}⪯{})",ac,[p,q],"Transitivity")
+preorder=Theory([obdecl,leqdecl],[refl,trans],Rule[],"Preorder")
+print(render(preorder))
 end
 
-# ############
-# # Preorder #
-# ############
-# ob = SortOp(:ob)
-# Ob = Sort(ob)
-# obdecl = SortDecl(Ob, "Underlying set of a preorder")
-
-# X, Y, Z = [Var(x, Ob) for x in [:x, :y, :z]]
-
-# Leq = TermOp(:≤, "binary")
-# leq = OpDecl(Leq, Bool, [X,Y])
-# refl = EqDecl("≤ reflexivity", App(top), App(Leq, [X,X]))
-
-# tran_subterm = App(neg, [App(land, [App(Leq, [X,Y]), App(Leq, [X,Z])])])
-
-# tran = EqDecl("≤ transitivity",
-#     App(top), App(lor, [tran_subterm, App(Leq, [X,Z])]))
-
-# preorder = extend(boolalg, Judgment[obdecl, leq, refl, tran], "Preorder")
-
-end
 """
-Rendered Theory
-
 ####################################
 # ******* Theory: Preorder ******* #
 ####################################
+
+2 sorts, 2 ops, 0 rules
 
 #########
 # Sorts #
 #########
 
-***
-
-----------   Bool
-Bool  sort
-
-The underlying set of a boolean algebra
-
-
-***
+==================================================
 
 --------   ob
 ob  sort
 
-Underlying set of a preorder
+Underlying set of preorder
+
+
+==================================================
+  A,B:ob
+-----------   leq
+(A≤B)  sort
+
+A relation from A -> B
 
 
 ##############
 # Operations #
 ##############
 
-***
-  x:ob y:ob
---------------   ≤
-(x ≤ y) : Bool
+==================================================
+q:(B≤C)  p:(A≤B)  A,B,C:ob
+--------------------------   trans
+      (p⪯q) : (A≤C)
+
+Transitivity
 
 
-***
+==================================================
+   A:ob
+----------   refl
+Aᵣ : (A≤A)
 
---------   ⊤
-⊤ : Bool
-
-Top element, x ∨ ¬x
-
-
-***
-  x:Bool
------------   ¬
-¬(x) : Bool
+Reflexivity
 
 
-***
-α:Bool β:Bool
---------------   ∨
-(α ∨ β) : Bool
-
-Join/Least upper bound
-
-
-***
-
---------   ⊥
-⊥ : Bool
-
-Bottom element, x ∧ ¬x
-
-
-***
-α:Bool β:Bool
---------------   ∧
-(α ∧ β) : Bool
-
-Meet/Greatest lower bound
-
-
-###################
-# Equality Axioms #
-###################
-
-***
-       x:Bool  y:Bool  z:Bool
-------------------------------------   ∨ associativity
-(x ∨ (y ∨ z)) = ((x ∨ y) ∨ z) : Bool
-
-
-***
-     x:Bool  y:Bool
-------------------------   ∧, ∨ absorption
-x = (x ∧ (x ∨ y)) : Bool
-
-
-***
-       x:Bool  y:Bool  z:Bool
-------------------------------------   ∧ associativity
-(x ∧ (y ∧ z)) = ((x ∧ y) ∧ z) : Bool
-
-
-***
-     x:Bool  y:Bool
-------------------------   ∨, ∧ absorption
-x = (x ∨ (x ∧ y)) : Bool
-
-
-***
-     x:Bool  y:Bool
-------------------------   ∨ symmetry
-(x ∨ y) = (y ∨ x) : Bool
-
-
-***
-          x:Bool  y:Bool  z:Bool
-------------------------------------------   ∧ ∨ distributivity
-(x ∧ (y ∨ z)) = ((x ∧ y) ∨ (x ∧ z)) : Bool
-
-
-***
-       x:ob
-------------------   ≤ reflexivity
-⊤ = (x ≤ x) : Bool
-
-
-***
-      x:Bool
-------------------   ∧ identity
-x = (x ∧ ⊤) : Bool
-
-
-***
-     x:Bool  y:Bool
-------------------------   ∧ symmetry
-(x ∧ y) = (y ∧ x) : Bool
-
-
-***
-      x:Bool
-------------------   ∨ identity
-x = (x ∨ ⊥) : Bool
-
-
-***
-              x:ob  y:ob  z:ob
----------------------------------------------   ≤ transitivity
-⊤ = (¬(((x ≤ y) ∧ (x ≤ z))) ∨ (x ≤ z)) : Bool
-
-
-***
-          x:Bool  y:Bool  z:Bool
-------------------------------------------   ∨ ∧ distributivity
-(x ∨ (y ∧ z)) = ((x ∨ y) ∧ (x ∨ z)) : Bool
 """

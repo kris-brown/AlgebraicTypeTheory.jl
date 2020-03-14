@@ -32,26 +32,26 @@ export Rewrite,
 using LightGraphs:
     star_digraph,
     path_digraph,
-    nv,
+    nv,ne, adjacency_matrix,
     vertices,
     edges,
     add_vertex!,
-    add_edge!,
+    add_edge!,rem_edge!,
     neighbors,
     AbstractGraph,
     rem_edge!,
     has_edge,
-    inneighbors
+    inneighbors,dijkstra_shortest_paths
 using MetaGraphs:
     MetaDiGraph, set_prop!, set_props!, props, filter_vertices, set_indexing_prop!, get_prop, has_prop
 using Colors: @colorant_str
-using GraphPlot: gplot
-using Compose: draw, PDF, cm
+using GraphPlot: spring_layout
 using Random: rand, randstring
-import Cairo, Fontconfig
-using Formatting: format
+using PlotlyJS: scatter, Plot, Layout, attr, savefig
 using SHA: sha256
-
+using NetworkLayout:Buchheim
+using LinearAlgebra: normalize, norm
+using Formatting: format
 ############################################################################
 # TYPES #
 #########
@@ -63,6 +63,7 @@ end
 struct Error
     err::String
 end
+
 MatchDict = Dict{Symbol,MetaDiGraph}
 MatchDict′ = Union{Error,MatchDict}
 @enum NodeType VarNode = 1 AppNode = 2 SortNode = 3 WildCard = 4 SortedTerm = 5 Unknown = 6
@@ -98,6 +99,92 @@ function simplerender(g::MetaDiGraph, n::Int = 0)::String
         throw(DomainError)
     end
 end
+
+nodecolor = [colorant"lightseagreen", colorant"orange", colorant"lightblue",
+             colorant"pink", colorant"grey", colorant"red"]
+nodeshapes = ["diamond","circle","square","star","cross","x"]
+function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
+             hashs::Bool=false, name::String = "", dryrun::Bool = false)::Nothing
+
+    # Helper funcs
+    rotate = (vv,θ) -> [cos(θ) -sin(θ);sin(θ) cos(θ)] * vv
+    vizedge = v -> v == [1] ?  "" : join(sort(v), ",")
+    vizsym = x -> x == nothing ? "?" : string(x)
+
+    # Collect metadata
+    nodedata = [(i, props(g, i)) for i in vertices(g)]
+    edgedata = [vizedge(get(props(g, e), :args, Int[])) for e in edges(g)]
+    nodelabel = [string(
+        (hashs && has_prop(g, i, :hash)) ? "[$(gethash(g, i, true))] " : "",
+        ids ? "$i " : "", vizsym(get(d, :sym, "?")),) for (i, d) in nodedata]
+    hovertext = [string(ids ? "" : "$i ",hashs ? "" : gethash(g,i,true))
+                 for i in vertices(g)]
+    membership = [get(d, :kind, nothing) for (_, d) in nodedata]
+    inds = [i == nothing ? length(nodecolor) : Int(i) for i in membership]
+    nodefill = nodecolor[inds] # default to final color
+    nodeshape = nodeshapes[inds]
+    # Create a tree from the DAG using Dijkstra's Algorithm
+    d = dijkstra_shortest_paths(g,root(g),allpaths=true)
+    g′ = copy(g)
+    for e in edges(g′) rem_edge!(g′,e) end
+    for e in edges(g′) rem_edge!(g′,e) end
+
+    @assert ne(g′) == 0 "$(collect(edges(g′)))"
+    for (i,j) in enumerate(d.predecessors)
+        if i == root(g) ? nothing : add_edge!(g′,j[1],i) end
+    end
+    @assert ne(g′) == nv(g)-1 "$(ne(g′)) != $(nv(g)-1)"
+
+    # Get initial guess for the layout from this tree
+    adj = Array(g′.graph.fadjlist)
+    pos = Buchheim.layout(adj)
+    locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
+    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=100,INITTEMP=1.0)
+    scale = max(max(locs_x...)-min(locs_x...),max(locs_y...)-min(locs_y...))
+    small = .03 * scale #heuristic for size of arrowheads
+    nodes = scatter(;x=locs_x, y=locs_y,mode="markers+text",text=nodelabel,
+                    hovertext = hovertext,
+                    hovermode="closest", name="nodes",
+                    marker=attr(symbol=nodeshape,size=30,color=nodefill),
+                    hoverinfo=(ids||hashs) ? "text+hovertext" : "none")
+
+    edge_traces = []
+    for v in vertices(g)
+        vv = [locs_x[v];locs_y[v]]
+        ns = neighbors(g,v)
+
+        if !isempty(ns)
+            ex, ey, et = [],[],[]
+            for n in ns
+                vn = [locs_x[n];locs_y[n]]
+                vect = vn-vv # src -> tar vector
+                vn = vv+vect*(norm(vect)/(norm(vect)+small)) # scale back endpoint
+                mid  = (vv*2 + vn)/3
+                vup,vdown = [normalize(rotate(vect,-x))*small for x in [.3, -.3]]
+                arrup, arrdown = [vn - vz for vz in [vup, vdown]]
+                append!(ex,[vv[1],mid[1],vn[1],arrup[1], vn[1],arrdown[1],nothing])
+                append!(ey,[vv[2],mid[2],vn[2],arrup[2], vn[2],arrdown[2],nothing])
+                append!(et,[nothing,vizedge(get_prop(g,v,n,:args)),
+                            nothing, nothing,nothing,nothing, nothing])
+            end
+            append!(edge_traces,[scatter(;x=ex,y=ey,text=et,mode="lines+text", hoverinfo="none",
+                                        name=nodelabel[v],line_color=nodefill[v])])
+        end
+    end
+    axis = attr(showline=false, # hide axis line, grid, ticklabels and  title
+                zeroline=false, showgrid=false, showticklabels=false,
+                scaleanchor="x", scaleratio=1)
+    layout = Layout(plot_bgcolor="#E5E5E5", paper_bgcolor="white",title=simplerender(g),
+                font_size=10, xaxis=axis,yaxis=axis,hovermode="closest", titlefont_size=14)
+    p = Plot([edge_traces...,nodes],layout)
+    tmp = string(tempname(),"_",name,".html")
+    savefig(p, tmp)
+    if !dryrun
+        run(Cmd(["open", tmp]))
+    end
+
+    return nothing
+end
 ############################################################################
 """Take an ordinary graph and add metadata in a conservative way."""
 function addhash(g::AbstractGraph)::MetaDiGraph
@@ -122,62 +209,7 @@ function symmetrize(g::T)::T where {T <: AbstractGraph}
     end
     return g
 end
-############################################################################
-# VISUALIZATION #
-#################
-function viz(
-    g::MetaDiGraph{Int64,Float64},
-    ids::Bool = false,
-    hashes::Bool = false,
-    dryrun::Bool = false,
-)::Nothing
-    nodecolor = [
-        colorant"lightseagreen",
-        colorant"orange",
-        colorant"lightblue",
-        colorant"pink",
-        colorant"grey",
-        colorant"red",
-    ]
 
-    function vizedge(v::Vector{Int})::String
-        if v == [1]
-            return ""
-        else
-            return join(sort(v), ",")
-        end
-    end
-
-    function vizsym(x::Union{Nothing,String,Symbol})::String
-        return x == nothing ? "?" : string(x)
-    end
-    nodedata = [(i, props(g, i)) for i in vertices(g)]
-    edgedata = [vizedge(get(props(g, e), :args, Int[])) for e in edges(g)]
-    nodelabel = [
-        string(
-            (hashes && has_prop(g, i, :hash)) ? "[$(gethash(g, i, true))] " : "",
-            ids ? "$i " : "",
-            vizsym(get(d, :sym, "?")),
-        ) for (i, d) in nodedata
-    ]
-    membership = [get(d, :kind, nothing) for (_, d) in nodedata]
-    nodefill = nodecolor[[i == nothing ? length(nodecolor) : Int(i) for i in membership]] # default to final color
-    graph = gplot(
-        g,
-        edgelabel = edgedata,
-        nodelabel = nodelabel,
-        nodefillc = nodefill,
-        edgelabelsize = 20,
-        edgelabeldistx = 0.0,
-        edgelabeldisty = 0.0,
-    )
-    pth = tempname()
-    draw(PDF(pth, 16cm, 16cm), graph)
-    if !dryrun
-        run(Cmd(["open", pth]))
-    end
-    return nothing
-end
 ############################################################################
 """Take a MetaDiGraph and add it disjointly to an existing MetaDiGraph
 Return index of where the merged-in graph ended up within original graph.
@@ -338,7 +370,10 @@ function rewrite_toplevel(x::MetaDiGraph, p1::MetaDiGraph, p2::MetaDiGraph)::Tup
     return (out, out==x)
 end
 
-
+"""render subsol."""
+function rss(x)::String
+    join(["$k $(simplerender(v))" for (k,v) in x],"\n")
+end
 
 """
     Check if structure of pattern matches structure of graphterm recursively.
@@ -352,15 +387,16 @@ can determine whether this is really an error or not.
 Concern: a variable in some top level operation uses the same variable in some nested
 operation. When we recursively match variables, there can be a name collision.
 """
-function patmatch(pat::MetaDiGraph, x::MetaDiGraph)
-    keys = [:kind, :sym]
+function patmatch(pat::MetaDiGraph, x::MetaDiGraph, path::Vector{Int}=Int[])
+    # println("Entering patmatch $path with \n\tpat $(simplerender(pat))\n\tx=$(simplerender(x))")
+    gkeys = [:kind, :sym]
     proot, xroot = [root(g) for g in [pat, x]]
-    patkindsym = [get_prop(pat, proot, k) for k in keys]
-    xkindsym = [get_prop(x, xroot, k) for k in keys]
+    patkindsym = [get_prop(pat, proot, k) for k in gkeys]
+    xkindsym = [get_prop(x, xroot, k) for k in gkeys]
 
     # base case: match a wild card
     if patkindsym[1] == WildCard
-        return Dict(patkindsym[2] => x)
+        return Dict(Symbol(path, patkindsym[2]) => x)
     end
     # base case: failure
     if patkindsym != xkindsym
@@ -369,21 +405,27 @@ function patmatch(pat::MetaDiGraph, x::MetaDiGraph)
     # recursive case: combine subsolutions
     np, nx = [neighbors(g, r) for (g, r) in zip([pat, x], [proot, xroot])]
     subsols = MatchDict()
+    keep = Set{Symbol}()
     for i in 1:arity(pat, proot)
         subpat = subgraph(pat, getarg(pat, proot, i))
         subx = subgraph(x, getarg(x, xroot, i))
-        subsol = patmatch(subpat, subx)
-        if subsol isa Error return Error("$i.$(subsol.err)") end
+        keep = union(keep,[getsym(subpat,i) for i in
+                           filter_vertices(subpat,:kind,WildCard)])
+        subsol = patmatch(subpat, subx, vcat(path,[i]))
+
+        ssstr = subsol isa Error ? string(subsol) : rss(subsol)
+        # println("$path Subsol $i with \n\tpat $(simplerender(pat))\n\tx=$(simplerender(x))\n$(ssstr)")
+        if subsol isa Error return subsol end
         for (k, v) in collect(subsol)
             if haskey(subsols, k)
                 h1 = gethash(subsols[k], root(subsols[k]))
                 h2 = gethash(v, root(v))
                 if h1 != h2
-                    viz(pat); viz(x)
+                    viz(pat,false,false,"errpat"); viz(x, false,false,"errx")
                     errs0 = "Currpat $(simplerender(subpat))\nCurrx $(simplerender(subx))"
                     errs1 = ["Subsols $k $(simplerender(v))" for (k,v) in subsols]
                     errs2 = ["Curr $k $(simplerender(v))" for (k,v) in subsol]
-                    errs = ["$i. $(simplerender(subsols[k])) != $(simplerender(v))",errs0, errs1...,errs2...]
+                    errs = ["$path.$i $(simplerender(subsols[k])) != $(simplerender(v))",errs0, errs1...,errs2...]
                     return Error(join(errs,"\n"))
                 end
             else
@@ -391,14 +433,31 @@ function patmatch(pat::MetaDiGraph, x::MetaDiGraph)
             end
         end
         end
-    # up = uninfer(pat)
-    # vars = [getsym(up,i) for i in filter_vertices(up, :kind, WildCard)]
-    return subsols # MatchDict(k=>v for (k,v) in subsols if k in vars) # maybe we need vars of pat instead?
-end
 
+    if isempty(path)
+        syms = paths_to_sym(pat)
+        res = Dict{Symbol,MetaDiGraph}()
+        # println("SUBSOLS KEYS $(keys(subsols))")
+        # println("SYMS $syms")
+        for (k,vs) in syms
+            for v in vs
+                sym = Symbol(v,k)
+                @assert haskey(subsols,sym)
+                if haskey(res,k)
+                    @assert res[k] == subsols[sym]
+                else
+                    res[k] = subsols[sym]
+                end
+            end
+        end
+        return res
+    else
+        return subsols
+    end
+end
 function sub(pat::MetaDiGraph, d::MatchDict)::MetaDiGraph
     pat = copy(pat)
-
+    # println("Trying to sub with ",join(["$k $(simplerender(v))" for (k,v) in d], "\n"))
     for wc in collect(filter_vertices(pat, :kind, WildCard))
         g = d[getsym(pat, wc)]
         pat, newhead = merge_in(pat, g)
@@ -412,6 +471,24 @@ function sub(pat::MetaDiGraph, d::MatchDict)::MetaDiGraph
     out = rehash!(out)
     set_indexing_prop!(out, :hash)
     return out
+end
+
+"""
+We care about all the possible paths from root to a given wildcard symbol
+This recursively gets them all.
+"""
+function paths_to_sym(g::MetaDiGraph, path::Vector{Int}=Int[],node::Int=0,
+                      )::Dict{Symbol,Set{Vector{Int}}}
+    node = node == 0 ? root(g) : node
+
+    if getkind(g,node) == WildCard
+        return Dict{Symbol,Set{Vector{Int}}}(getsym(g,node)=>Set([path]))
+    else
+        subsols = [paths_to_sym(g,vcat(path,[i]),getarg(g,node,i))
+                    for i in 1:arity(g,node)]
+
+        return isempty(subsols) ? Dict{Symbol,Set{Vector{Int}}}() : merge(subsols...)
+    end
 end
 
 """Compute hash, assuming neighbors' hashes are correctly computed."""
@@ -477,7 +554,7 @@ function rm_dups(g::MetaDiGraph, preferred::Set{Int})::MetaDiGraph
     out = subgraph(g_, root(g_))
     if length(keep_nodes) != nv(out) || any([!(has_prop(out, e, :args)) for e in edges(out)])
         println("keep_nodes $(sort([(v, k[1:3]) for (k, v) in keep_nodes]))")
-        viz(out, true, true)
+        viz(out, true, false, "err_end")
         throw(Exception(simplerender(g)))
     end
     return out # discard anything not connected to root

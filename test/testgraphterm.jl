@@ -4,17 +4,6 @@ using LightGraphs
 
 using AlgebraicTypeTheory.Graph
 using AlgebraicTypeTheory.GraphTerm
-# if isdefined(@__MODULE__, :LanguageServer)
-#    include("../src/Graph.jl")
-#    include("../src/GraphTerm.jl")
-#    using .Graph
-#    using .GraphTerm
-#    import .Graph: viz
-# else
-#     using AlgebraicTypeTheory.Graph
-#     using AlgebraicTypeTheory.GraphTerm
-#     import AlgebraicTypeTheory.GraphTerm: patmatch
-# end
 
 ############################################################################
 Γ, Δ = [mkVar(x, mkSort(:Ob)) for x in [:Γ,:Δ]]
@@ -22,7 +11,7 @@ using AlgebraicTypeTheory.GraphTerm
 HomΓΓ, HomΓΔ = [mkSort(:Hom, x) for x in [[Γ,Γ], [Γ,Δ]]]
 Homδγ = mkApp(:⋅, [mkVar(:δ, HomΓΓ),mkVar(:γ, HomΓΔ)])
 @test string(Homδγ) == "⋅(δ:Hom(Γ:Ob, Γ:Ob), γ:Hom(Γ:Ob, Δ:Ob))"
-viz(Homδγ.g,true,true,true)
+viz(Homδγ.g,true,true,"")
 ################################################################################
 x1, x2, x3, x4, q1, q2, q3, q4 = [mkVar(x, mkSort(:N))
                                   for x in [:x1,:x2,:x3,:x4,:q1,:q2,:q3,:q4]]

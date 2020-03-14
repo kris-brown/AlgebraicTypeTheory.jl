@@ -1,54 +1,14 @@
 module GraphTerm
 export rewrite,
-    Term,
-    Theory,
-    SortDecl,
-    OpDecl,
-    Rule,
-    validate,
-    join_term,
-    mkSort,
-    mkApp,
-    mkVar,
-    mkWildCard,
-    mkPat,
-    unPat,
-    viz,
-    simplerender,
-    root,
-    getkind,
-    patmatch,
-    sub,
-    render,
-    infer,
-    infer!,
-    uninfer,
-    vars,
-    getSig,
-    extend,
-    upgrade
+    Term, Theory, SortDecl, OpDecl, Rule, validate,join_term,
+    Sort, App,Var, mkPat, unPat,
+    viz, simplerender, render, root, getkind, patmatch, sub,
+    infer, infer!, uninfer,
+    vars, getSig, extend, upgrade
 
-using MetaGraphs:
-    MetaDiGraph,
-    get_prop,
-    has_prop,
-    set_prop!,
-    set_props!,
-    set_indexing_prop!,
-    props,
-    filter_vertices
+using MetaGraphs: MetaDiGraph, get_prop, has_prop, set_prop!, set_props!, set_indexing_prop!, props, filter_vertices
 using AutoHashEquals: @auto_hash_equals
-using LightGraphs:
-    nv,
-    ne,
-    vertices,
-    edges,
-    neighbors,
-    inneighbors,
-    maxsimplecycles,
-    add_edge!,
-    has_edge,
-    rem_edge!
+using LightGraphs: nv, ne, vertices, edges, neighbors, inneighbors, maxsimplecycles, add_edge!, has_edge, rem_edge!
 using SparseArrays: blockdiag
 using Formatting: FormatExpr, printfmt, format
 using SHA: sha256
@@ -180,8 +140,8 @@ function Base.hash(r::OpDecl)::UInt64
 end
 
 ############################################################################
-function viz(t::Term, ids::Bool = false, hashes::Bool = false)::Nothing
-    viz(t.g, ids, hashes)
+function viz(t::Term, ids::Bool = false, hshs::Bool=false,name::String = "")::Nothing
+    viz(t.g, ids, hshs, name)
 end
 function root(t::Term)::Int
     root(t.g)
@@ -320,8 +280,9 @@ function validate(g::MetaDiGraph)::MetaDiGraph
         sym = getsym(g, i)
 
         if is_inferred && kind in [VarNode, AppNode]
-            @assert length(inn) == 1 "If inferred, all Vars/Apps should be the lone child (of a SortedTerm)"
-            @assert getkind(g, inn[1]) == SortedTerm "If inferred, all Vars/Apps should the lone child of a SortedTerm"
+            @assert length(inn) == 1 "If inferred, all Vars/Apps should be the lone child (of a SortedTerm) $inn"
+            innkind = getkind(g, inn[1])
+            @assert innkind == SortedTerm "If inferred, all Vars/Apps should the lone child of a SortedTerm: $innkind"
         end
 
         if kind == VarNode
@@ -335,7 +296,7 @@ function validate(g::MetaDiGraph)::MetaDiGraph
             @assert getkind(g, sta1) == SortNode "First arg of SortedTerm is a sort $(getkind(g, sta1))"
             if !(getkind(g, sta2) in [AppNode, VarNode, WildCard])
                 println("Error with $(simplerender(g))")
-                viz(g, true, true)
+                viz(g, true, false, "sortedtermerror")
             end
             @assert getkind(g, sta2) in [AppNode, VarNode, WildCard] "Second arg of SortedTerm is Var/App/WildCard: $(getkind(g, sta2))"
 
@@ -375,33 +336,29 @@ function join_term(sym::Symbol, kind::NodeType, args::Vector{Term})::Term
     newg = rehash!(base)
     if gethash(newg) != h
         println("joinTerm $sym $kind $([simplerender(a) for a in args])")
-        viz(base, true, true)
-        viz(newg, true, true)
+        viz(base, false,true, "jointermErrBase")
+        viz(newg, false,true, "jointermErrNewG")
     end
     @assert gethash(newg) == h
     return Term(newg)
 end
 ############################################################################
-function mkSort(sym::Symbol, args::Vector{Term} = Term[])::Term
+function Sort(sym::Symbol, args::Vector{Term} = Term[])::Term
     @assert all([getkind(a) in [AppNode, VarNode] for a in args]) "mkApp arg fail $args"
     join_term(sym, SortNode, args)
 end
-function mkApp(sym::Symbol, args::Vector{Term} = Term[])::Term
+function App(sym::Symbol, args::Vector{Term} = Term[])::Term
     @assert all([getkind(a) in [AppNode, VarNode] for a in args]) "mkApp arg fail $args"
     join_term(sym, AppNode, args)
 end
-function mkVar(sym::Symbol, sort::Term)::Term
+function Var(sym::Symbol, sort::Term)::Term
     @assert getkind(sort) == SortNode
     join_term(sym, VarNode, [sort])
 end
-function mkWildCard(sym::Symbol)::Term join_term(sym, WildCard, Term[]) end
-
 
 """Interpret a term as a pattern for matching. All variables Var(Varsym)->Sort
 are replaced with Wildcard(Varsym) and outgoing edge removed"""
-function mkPat(t::Term)::Term
-    Term(mkPat(t.g))
-end
+function mkPat(t::Term)::Term Term(mkPat(t.g)) end
 
 """Convert variables into wildcards.
 Under normal circumstances only advisable to call on inferred terms."""
@@ -475,9 +432,9 @@ patterns to be matched against other terms."""
 function upgrade(t::Theory)::Theory
     # println("upgrading $(t.name)")
     syms = symdag(t)
-    println("symdag $syms")
+    # println("symdag $syms")
     for sym in syms
-        println("Upgrading $sym")
+        #println("Upgrading $sym")
         isop = haskey(t.ops, sym)
         decl = isop ? t.ops[sym] : t.sorts[sym]
         udecl = upgrade(t, decl)
@@ -525,21 +482,21 @@ We may need to use rewrite rules even at this step?
 function infer(th::Theory, t::Term)::Term
     sts = isempty(collect(filter_vertices(t.g, :kind, SortedTerm)))
     if !sts
-        viz(t, true)
+        viz(t, false, true,"alreadyinferred")
         @assert false "Cannot infer something already inferred: $(simplerender(t)) $sts"
     end
     res = infer!(th, copy(t.g))
     try
         return Term(res)
     catch m
-        viz(t.g)
-        viz(res, false, true)
-        @assert false
+        viz(t.g, true,false,"inferErrorG")
+        viz(res, false,true, "inferErrorRes")
+        throw(m)
     end
 end
 
 function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
-    # println("STARTING INFER W/ $(simplerender(g))")
+    println("STARTING INFER W/ $(simplerender(g))")
     seen = Set{String}()
     preferred = sort(collect(vertices(g)))  # when reindexing, default to these values
     first(g.indices) # make sure we have :hash index
@@ -574,17 +531,14 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
                 argterm = Term(argterm_) # make sure this is well-formed
                 validate(th, argterm.g)
                 if getkind(argterm) != SortedTerm
-                    viz(g,false,true)
+                    viz(g,false, true,"BadArgterm")
                     @assert false "Bad argterm $(getarg(g, n, i)) is not SortedTerm"
                 end
                 m = patmatch(argpat, argterm)
                 if m isa Error
-                    #viz(argpat, true)
-                    #viz(argterm, true)
-                    viz(g,false,true)
+                    #viz(argpat, true); viz(argterm, true)
+                    viz(g,false, false,"inferPatmatchErr")
                     @assert false "$sym @ $viewhsh arg $i: $(m.err)"
-                else
-                    for (k,v) in m  println("match $k $(simplerender(v))") end
                 end
                 push!(matches, m)
             end
@@ -595,7 +549,7 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
             for i in traverse(g, sorti)
                 ghi = gethash(g, i)
                 if !(ghi in seen)
-                    # println("\tadding $(ghi[1:3]) from sort")
+                    println("\tadding $(ghi[1:3]) from sort")
                     push!(seen, gethash(g, i))
                     if getkind(g,i)==SortedTerm
                         child = getarg(g,i,2)
@@ -611,20 +565,20 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
 
         elseif kind in [SortNode, SortedTerm] # pass
         else
-            viz(g)
+            viz(g,false,false,"DomainError")
             throw(DomainError("$(simplerender(g)) $viewhsh $kind"))
         end
 
         if kind in [AppNode, VarNode]
             st = add_vertprop!(g, Dict(:kind => SortedTerm, :sym => Symbol()))
             set_indexing_prop!(g, st, :hash, compute_hash(g, st))
-            # println("$n: add $st ")
+            println("$n: add $st ")
             if n == root(g)
                 @assert set_prop!(g, :root, st)
             else
-                # println("\t$n inneighbors $(collect(inneighbors(g, n)))")
+                println("\t$n $sym inneighbors $(collect(inneighbors(g, n)))")
                 for i in collect(inneighbors(g, n))
-                    # println("\t$(getkind(g, i)) adding $i->$st ($(getkind(g, st))) and removing $i->$n ($(getkind(g, n)))")
+                    println("\t$(getkind(g, i)) adding $i->$st ($(getkind(g, st))) and removing $i->$n ($(getkind(g, n)))")
                     @assert add_edgeprop!(g, i, st, get_prop(g, i, n, :args))
                     @assert getkind(g, n) in [AppNode, VarNode, WildCard]
                     @assert rem_edge!(g, i, n)
@@ -633,6 +587,8 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
             @assert add_edgeprop!(g, st, sorti, [1])
             @assert add_edgeprop!(g, st, n, [2])
         end
+
+        println("adding $(gethash(g, n,true)) ")
 
         push!(seen, gethash(g, n))
         seeninds = Set([v for v in vertices(g) if gethash(g, v) in seen])
@@ -680,7 +636,7 @@ function extend(
     ss = unique(vcat([uninfer(sd) for sd in values(t1.sorts)], Vector{SortDecl}(s)))
     os = unique(vcat([uninfer(od) for od in values(t1.ops)], Vector{OpDecl}(o)))
     rs = unique(vcat([uninfer(rd) for rd in values(t1.rules)], Vector{Rule}(r)))
-    println("extension has $(length(ss)) sorts $(length(os)) ops $(length(rs)) rules ")
+    #  has $(length(ss)) sorts $(length(os)) ops $(length(rs)) rules ")
     return Theory(ss, os, rs, isempty(n) ? t1.name : n)
 end
 ##############################################################################

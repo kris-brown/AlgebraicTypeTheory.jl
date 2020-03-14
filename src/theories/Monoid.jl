@@ -1,51 +1,42 @@
 module Monoid
+export monoid
+using GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
 
-if isdefined(@__MODULE__, :LanguageServer)
-    include("../DataTypes.jl")
-    include("../Core.jl")
-    using .DataTypes
-else
-    using DataTypes
-end
+Ob = Sort(:Ob)
+obdecl = SortDecl(:Ob, "Underlying set of a monoid")
 
+m_id = OpDecl(:e, 0, Ob, Term[], "Identity element of monoid")
 
-ob = SortOp(:Ob)
-Ob = Sort(ob)
-obdecl = SortDecl(Ob, "Underlying set of a monoid")
-
-eOp = TermOp(:e)
-m_id = OpDecl(eOp, Ob, "Identity element of monoid")
-
-Mul = TermOp(:mul, "({} * {})")
-mul = OpDecl(Mul, Ob, [Var(:α, Ob), Var(:β, Ob)])
+mul = OpDecl(:*, "binary", Ob, [Var(:α, Ob), Var(:β, Ob)], "Multiplication")
 X, Y, Z = [Var(x, Ob) for x in [:X,:Y,:Z]]
 
-id_term = App(eOp)
+id_term = App(:e)
 
-m_idl = EqDecl("mul left-identity", X, App(Mul, [id_term, X]))
-m_idr = EqDecl("mul right-identity", X, App(Mul, [X, id_term]))
+m_idl = Rule("mul left-identity", X, App(:*, [id_term, X]))
+m_idr = Rule("mul right-identity", X, App(:*, [X, id_term]))
 
-m_asc = EqDecl("mul associativity",
-    App(Mul, [X,App(Mul, [Y,Z])]),App(Mul, [App(Mul, [X,Y]),Z]))
+m_asc = Rule("mul associativity",
+    App(:*, [X,App(:*, [Y,Z])]),App(:*, [App(:*, [X,Y]),Z]))
 
-# monoid = mkTheory("Monoid", Judgment[obdecl, mul, m_id, m_idl, m_idr, m_asc])
-
+monoid = Theory([obdecl], [mul,m_id],[m_idl, m_idr, m_asc],"Monoid")
+print(render(monoid))
 end
-"""
-Rendered theory:
 
+"""
 ##################################
 # ******* Theory: Monoid ******* #
 ##################################
+
+1 sorts, 2 ops, 3 rules
 
 #########
 # Sorts #
 #########
 
-***
+==================================================
 
---------   ob
-ob  sort
+--------   Ob
+Ob  sort
 
 Underlying set of a monoid
 
@@ -54,38 +45,40 @@ Underlying set of a monoid
 # Operations #
 ##############
 
-***
+==================================================
+   α,β:Ob
+------------   *
+(α * β) : Ob
 
-------   e
-e : ob
+Multiplication
+
+
+==================================================
+
+--------   e
+e() : Ob
 
 Identity element of monoid
-
-
-***
- α:ob β:ob
-------------   mul
-(α * β) : ob
 
 
 ###################
 # Equality Axioms #
 ###################
 
-***
-      X:ob
-----------------   mul right-identity
-X = (X * e) : ob
+==================================================
+              X,Y,Z:Ob
+------------------------------------   mul associativity
+(X * (Y * Z)) = ((X * Y) * Z)   : Ob
 
 
-***
-         X:ob  Y:ob  Z:ob
-----------------------------------   mul associativity
-(X * (Y * Z)) = ((X * Y) * Z) : ob
+==================================================
+        X:Ob
+--------------------   mul left-identity
+X = (e() * X)   : Ob
 
 
-***
-      X:ob
-----------------   mul left-identity
-X = (e * X) : ob
+==================================================
+        X:Ob
+--------------------   mul right-identity
+X = (X * e())   : Ob
 """

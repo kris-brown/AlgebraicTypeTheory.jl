@@ -1,115 +1,107 @@
-module Cat
-export cat
-
 if isdefined(@__MODULE__, :LanguageServer)
-    include("../DataTypes.jl")
-    include("../Core.jl")
-    using .DataTypes
+    include("../../src/AlgebraicTypeTheory.jl")
+    using .AlgebraicTypeTheory.Graph
+    using .AlgebraicTypeTheory.GraphTerm
 else
-    using DataTypes
+    using AlgebraicTypeTheory.Graph
+    using AlgebraicTypeTheory.GraphTerm
 end
 
-#########################################################################
-ob, Hom = [SortOp(x, i) for (x, i) in zip([:Ob, :Hom], [0,"({}→{})"])]
-Ob = Sort(ob)
-α, β, θ, A, B, C, D, Γ, Δ, H = [Var(x, Ob) for x in [:α,:β,:θ,:A,:B,:C,:D,:Γ,:Δ,:H]]
+Ob = mkSort(:Ob)
+Obdecl = SortDecl(:Ob, "Object of category")
+α, β, θ, A, B, C, D, Γ, Δ, Ξ = [mkVar(x, Ob) for x in [:α,:β,:θ,:A,:B,:C,:D,:Γ,:Δ,:Ξ]]
+Hom_aa, Hom_bb, Hom_ab, Hom_bc, Hom_ac, Hom_cd, Hom_αα, Hom_ββ, Hom_αβ, Hom_αθ, Hom_βθ, Hom_ΔΓ, HomΞΔ = [mkSort(:Hom, x) for x in [ [A,A],[B,B],[A,B],[B,C],[A,C],[C,D],[α,α],[β,β],[α,β],[α,θ],[β,θ],[Δ,Γ],[Ξ,Δ]]]
+f, g, h, γ, δ = [mkVar(x, h) for (x, h) in zip([:f,:g,:h,:γ,:δ], [Hom_ab,Hom_bc,Hom_cd,Hom_αβ,Hom_βθ])]
 
-Hom_ab, Hom_bc, Hom_ac, Hom_cd, Hom_αα, Hom_αβ, Hom_αθ, Hom_βθ, Hom_ΔΓ, Hom_HΔ = [Sort(Hom, x)
-    for x in [ [A,B],[B,C],[A,C],[C,D],[α,α],[α,β],[α,θ],[β,θ],[Δ,Γ],[H,Δ]]]
+Homdecl = SortDecl(:Hom, 2, [α, β], "Hom-set of morphisms from α to β")
+iddecl = OpDecl(:id, 1, Hom_αα, [α], "The identity morphism")
 
-obdecl = SortDecl(Ob, string("Objects of a category are a convenience to make ",
-        "it easier to talk about morphisms."))
-homdecl = SortDecl(Hom_αβ, [α,β], string("Hom-set, a set of morphisms which ",
-        "exists between any pair of objects in a category."))
-id = TermOp(:id, 1)
-iddecl = OpDecl(id, Hom_αα, [α], string("The identity operation picks out a ",
-        "particular morphism in Hom(α,α) which satisfies the identity laws."))
-f, g, h, γ, δ = [Var(x, h) for (x, h) in zip(
-        [:f, :g, :h, :γ, :δ], [Hom_ab, Hom_bc, Hom_cd, Hom_αβ,Hom_βθ])]
+cmpdecl = OpDecl(:⋅, "binary", Hom_αθ, [γ,δ], "Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.")
 
-Cmp = TermOp(:⋅, "binary")
-Cmpdecl = OpDecl(Cmp,Hom_αθ,[γ,δ],
-        string("Composition, only defined for pairs of morphisms that match ",
-         "head-to-tail, is an associative operation which picks out a third."))
+idA, idB = [mkApp(:id, [x]) for x in [A,B]]
+fg, gh = [mkApp(:⋅, x) for x in [[f,g],[g,h]]]
 
-fg, gh = [App(Cmp, x) for x in [[f,g],[g,h]]]
+f_gh, fg_h = [mkApp(:⋅, x) for x in [[fg,h],[f,gh]]]
 
-idA, idB = [App(id, [x]) for x in [A,B]]
-f_gh, fg_h = [App(Cmp, x) for x in [[fg,h],[f,gh]]]
+idldecl = Rule("⋅ left-identity", f, mkApp(:⋅, [idA,f]))
+idrdecl = Rule("⋅ right-identity", f, mkApp(:⋅, [f,idB]))
+ascdecl = Rule("⋅ associativity", f_gh, fg_h)
 
-idldecl = EqDecl("⋅ left-identity", f, App(Cmp, [idA,f]))
-idrdecl = EqDecl("⋅ right-identity", f, App(Cmp, [f,idB]))
-ascdecl = EqDecl("⋅ associativity", f_gh, fg_h)
+cat = Theory([Obdecl,Homdecl], [iddecl,cmpdecl], [idldecl,idrdecl,ascdecl], "Category")
 
-# cat = mkTheory("Cat",Judgment[obdecl, iddecl, homdecl, Cmpdecl,
-#                               idldecl, idrdecl, ascdecl])
-end
+
+# Tests
+idfg = mkApp(:⋅, [idA,fg])
+m = patmatch(cat.rules[1].t2, infer(cat, idfg))
+rewritten = uninfer(sub(cat.rules[1].t1, m))
+@assert render(cat,rewritten) == "(f ⋅ g)"
+println(render(cat))
+
 """
-Rendered theory
+####################################
+# ******* Theory: Category ******* #
+####################################
 
-
-###############################
-# ******* Theory: Cat ******* #
-###############################
+2 sorts, 2 ops, 3 rules
 
 #########
 # Sorts #
 #########
 
-***
-α:Ob  β:Ob
------------   Hom
-(α→β)  sort
-
-Hom-set, a set of morphisms which exists between any pair of objects in a category.
-
-
-***
+==================================================
 
 --------   Ob
 Ob  sort
 
-Objects of a category are a convenience to make it easier to talk about morphisms.
+Object of category
+
+
+==================================================
+    α,β:Ob
+--------------   Hom
+Hom(α,β)  sort
+
+Hom-set of morphisms from α to β
 
 
 ##############
 # Operations #
 ##############
 
-***
-    α:Ob β:Ob θ:Ob
------------------------   ⋅
-((α→β) ⋅ (β→θ)) : (α→θ)
+==================================================
+      α:Ob
+----------------   id
+id(α) : Hom(α,α)
+
+The identity morphism
+
+
+==================================================
+γ:Hom(α,β)  α,β,θ:Ob  δ:Hom(β,θ)
+--------------------------------   ⋅
+       (γ ⋅ δ) : Hom(α,θ)
 
 Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.
-
-
-***
-    α:Ob
--------------   id
-id(α) : (α→α)
-
-The identity operation picks out a particular morphism in Hom(α,α) which satisfies the identity laws.
 
 
 ###################
 # Equality Axioms #
 ###################
 
-***
-  A:Ob  B:Ob  f:(A→B)
------------------------   ⋅ right-identity
-(f ⋅ id(B)) = f : (A→B)
+==================================================
+f:Hom(A,B)  g:Hom(B,C)  A,B,C,D:Ob  h:Hom(C,D)
+----------------------------------------------   ⋅ associativity
+   ((f ⋅ g) ⋅ h) = (f ⋅ (g ⋅ h)) : Hom(A,D)
 
 
-***
-A:Ob  B:Ob  C:Ob  D:Ob  f:(A→B)  g:(B→C)  h:(C→D)
--------------------------------------------------   ⋅ associativity
-      ((f ⋅ g) ⋅ h) = (f ⋅ (g ⋅ h)) : (A→D)
+==================================================
+    f:Hom(A,B)  A,B:Ob
+--------------------------   ⋅ left-identity
+f = (id(A) ⋅ f) : Hom(A,B)
 
 
-***
-  A:Ob  B:Ob  f:(A→B)
------------------------   ⋅ left-identity
-(id(A) ⋅ f) = f : (A→B)
+==================================================
+    f:Hom(A,B)  A,B:Ob
+--------------------------   ⋅ right-identity
+f = (f ⋅ id(B)) : Hom(A,B)
 """
