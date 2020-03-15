@@ -47,3 +47,11 @@ makedocs(
   ]
 )
 
+@info "Deploying docs"
+deploydocs(
+  target = "build",
+  repo   = "github.com/kris-brown/AlgebraicTypeTheory.jl.git",
+  branch = "gh-pages",
+  deps   = nothing,
+  make   = nothing
+)
