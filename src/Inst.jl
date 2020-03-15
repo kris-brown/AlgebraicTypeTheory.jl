@@ -7,6 +7,7 @@ using AutoHashEquals: @auto_hash_equals
 using DataStructures: OrderedDict
 using CodeTransformation: addmethod!
 using CodeTracking: definition
+using SHA: sha256
 
 using AlgebraicTypeTheory.GraphTerm
 using AlgebraicTypeTheory.Graph
@@ -100,39 +101,27 @@ end
 """
 Supply args to a function by keyword
 """
-function funcEval(f::T, ctx::Dict{Symbol,Any})::Any where {T<:Union{JuliaFunction, JuliaType}}
+function funcEval(f::JuliaFunction, ctx::Dict{Symbol,Any}, dispatch::Bool=true)::Any
     args = map(((sym, type),)->type(ctx[sym]), collect(f.args))
     return funcEval(f, args)
 end
 
 """
 Create an expression which can be evaluated in an environment where all the datatypes/functions involved are defined.
+Alternatively, run the function "purely" without using the external dispatch environment.
 """
-# function funcEval(f::T, args::Vector{Any}
-#                   )::Expr where {T<:Union{JuliaFunction, JuliaType}}
-#     function tmp end
-#     println("Eval $(f.sym) $args")
-#     # addmethod!(Tuple{typeof(tmp),values(f.args)...}, f.impl)
-#     addmethod!(Tuple{typeof(tmp),repeat([Any], length(f.args))...}, f.impl)
-#     return Expr(:call, tmp, args...)
-#     # if arg_expr return :($tmp(args...))
-#     # else  return :($tmp($(args)...))
-#     # end
-# end
 
-# function funcEval2(f::T, args::Vector{Any}
-#     )::Expr where {T<:Union{JuliaFunction, JuliaType}}
-# callexpr = Expr(:call,f.sym,[Symbol("x$i") for i in 1:length(args)]...)
-# blockexpr = Expr(:block,codeExprs...)
-# funexpr = Expr(:function, callexpr,blockexpr)
-# println("Eval $(f.sym) $args")
-# return Expr(:call, f.sym, args...)
-# end
-
-function funcEval(f::T, args::Vector{Any}
-    )::Expr where {T<:Union{JuliaFunction, JuliaType}}
-    # eval(f.impl)
-    return Expr(:call, f.sym, args...)
+function funcEval(f::JuliaFunction, args::Vector{Any}, dispatch::Bool=true,
+    )::Expr
+    if dispatch
+        return Expr(:call, f.sym, args...)
+    else
+        hshname = Symbol(bytes2hex(sha256(join(f.impl.args))))
+        callexpr = Expr(:call, hshname, keys(f.args)...)
+        funexpr = Expr(:function, callexpr,f.impl)
+        callexpr = Expr(:call, hshname, args...)
+    return Expr(:block,funexpr, callexpr)
+    end
 end
 
 
@@ -174,3 +163,16 @@ function instEval(i::Instance,g::MetaDiGraph,n::Int=0,
 
 end
 end
+
+
+# function funcEval(f::T, args::Vector{Any}
+#                   )::Expr where {T<:Union{JuliaFunction, JuliaType}}
+#     function tmp end
+#     println("Eval $(f.sym) $args")
+#     # addmethod!(Tuple{typeof(tmp),values(f.args)...}, f.impl)
+#     addmethod!(Tuple{typeof(tmp),repeat([Any], length(f.args))...}, f.impl)
+#     return Expr(:call, tmp, args...)
+#     # if arg_expr return :($tmp(args...))
+#     # else  return :($tmp($(args)...))
+#     # end
+# end

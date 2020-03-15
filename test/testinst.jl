@@ -48,6 +48,10 @@ function fun(x::Int,y::Int)::Int return x*y  end
 f′′ = mkFunc(fun, [Int, Int]) # specify which method via types (otherwise the 1st)
 @test eval(funcEval(f′′, Any[4,5])) == 20
 
+# Suppose we are in unknown environment, such that fun's meaning is uncertain
+function fun(x::Int,y::Int)::Int nothing  end
+@test eval(funcEval(f′′, Any[4,5])) == nothing
+@test eval(funcEval(f′′, Any[4,5], false)) == 20 # use the source code, not relying on dispatch to resolve "fun"
 #############
 # Instances #
 #############

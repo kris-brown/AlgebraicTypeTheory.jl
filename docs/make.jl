@@ -51,7 +51,7 @@ withenv("GITHUB_EVENT_NAME" => "push",
 "GITHUB_REPOSITORY" => "JuliaDocs/Documenter.jl",
 "GITHUB_REF" => "refs/tags/v1.2.3",
 "GITHUB_ACTOR" => "github-actions",
-"GITHUB_TOKEN" => "SGVsbG8sIHdvcmxkLg==",
+"GITHUB_TOKEN" => "${{ secrets.GITHUB_TOKEN }}",
 "DOCUMENTER_KEY" => nothing,
 ) do
 
