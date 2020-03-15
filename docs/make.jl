@@ -37,30 +37,30 @@ makedocs(
       "generated/theories/boolean.md",
       "generated/theories/preorder.md",
       "generated/theories/cat.md",
-      "generated/theories/cwf.md",      ],
+      "generated/theories/cwf.md",
+      "generated/theories/cwf_no_level.md",     ],
 
       "Core" => Any[
-        "generated/core/core.md",
-        "generated/core/inst.md",
+        "generated/core/graph.md",
+        "generated/core/graphterm.md",
       ],
-#       "Experimental features" => Any[
-#         "generated/programs/algebraic_nets.md",
-#       ],
-#     "Modules" => Any[
-#       "apis/core.md",
-#       "apis/doctrines.md",
-#       "apis/wiring_diagrams.md",
-#       "apis/graphics.md",
-#       "apis/programs.md",
-#     ]
   ]
 )
-#
-# @info "Deploying docs"
-# deploydocs(
-#   target = "build",
-#   repo   = "github.com/kris-brown/AlgebraicTypeTheory.jl.git",
-#   branch = "gh-pages",
-#   deps   = nothing,
-#   make   = nothing
-# )
+
+withenv("GITHUB_EVENT_NAME" => "push",
+"GITHUB_REPOSITORY" => "JuliaDocs/Documenter.jl",
+"GITHUB_REF" => "refs/tags/v1.2.3",
+"GITHUB_ACTOR" => "github-actions",
+"GITHUB_TOKEN" => "SGVsbG8sIHdvcmxkLg==",
+"DOCUMENTER_KEY" => nothing,
+) do
+
+@info "Deploying docs"
+deploydocs(
+  target = "build",
+  repo   = "github.com/kris-brown/AlgebraicTypeTheory.jl.git",
+  branch = "gh-pages",
+  deps   = nothing,
+  make   = nothing
+)
+end

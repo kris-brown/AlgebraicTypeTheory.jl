@@ -1,21 +1,14 @@
 module Cwf
-
-if isdefined(@__MODULE__, :LanguageServer)
-    include("../../src/AlgebraicTypeTheory.jl")
-    using .AlgebraicTypeTheory.Graph
-    using .AlgebraicTypeTheory.GraphTerm
-else
-    using AlgebraicTypeTheory.Graph
-    using AlgebraicTypeTheory.GraphTerm
-end
+export cwf
+using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, extend, infer
 
 #############
 # CONTEXTS #
 ############
-Ctx, Size = map(mkSort, [:Ctx, :Size])
-A, B, C, D, Γ, Δ, Ξ = [mkVar(x, Ctx) for x in [:A,:B,:C,:D,:Γ,:Δ,:Ξ]]
-Hom_aa, Hom_bb, Hom_ab, Hom_bc, Hom_ac, Hom_cd, Hom_ΔΓ, HomΞΔ = [mkSort(:Hom, x) for x in [ [A,A],[B,B],[A,B],[B,C],[A,C],[C,D],[Δ,Γ],[Ξ,Δ]]]
-f, g, h, γ, δ = [mkVar(x, h) for (x, h) in zip([:f,:g,:h,:γ,:δ], [Hom_ab,Hom_bc,Hom_cd,Hom_ΔΓ,HomΞΔ])]
+Ctx, Size = map(Sort, [:Ctx, :Size])
+A, B, C, D, Γ, Δ, Ξ = [Var(x, Ctx) for x in [:A,:B,:C,:D,:Γ,:Δ,:Ξ]]
+Hom_aa, Hom_bb, Hom_ab, Hom_bc, Hom_ac, Hom_cd, Hom_ΔΓ, HomΞΔ = [Sort(:Hom, x) for x in [ [A,A],[B,B],[A,B],[B,C],[A,C],[C,D],[Δ,Γ],[Ξ,Δ]]]
+f, g, h, γ, δ = [Var(x, h) for (x, h) in zip([:f,:g,:h,:γ,:δ], [Hom_ab,Hom_bc,Hom_cd,Hom_ΔΓ,HomΞΔ])]
 ctxdecl = SortDecl(:Ctx, """Contexts: Concretely, a mapping xᵢ:Xᵢ of free variables to types.
 Consider these as objects in a category C.""")
 homdecl = SortDecl(:Hom, "{}→{}", [A,B], "Substitutions between contexts: concretely, a substitution bᵢ:βᵢ↦aᵢ:αᵢ.
@@ -24,13 +17,13 @@ iddecl = OpDecl(:id, 1, Hom_aa, [A], "The identity morphism")
 
 cmpdecl = OpDecl(:cmp, "({}⋅{})", Hom_ac, [f,g], "Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.")
 
-idA, idB, idΓ = [mkApp(:id, [x]) for x in [A,B,Γ]]
-fg, gh = [mkApp(:cmp, x) for x in [[f,g],[g,h]]]
+idA, idB, idΓ = [App(:id, [x]) for x in [A,B,Γ]]
+fg, gh = [App(:cmp, x) for x in [[f,g],[g,h]]]
 
-f_gh, fg_h = [mkApp(:cmp, x) for x in [[fg,h],[f,gh]]]
+f_gh, fg_h = [App(:cmp, x) for x in [[fg,h],[f,gh]]]
 
-idldecl = Rule("⋅ left-identity", f, mkApp(:cmp, [idA,f]))
-idrdecl = Rule("⋅ right-identity", f, mkApp(:cmp, [f,idB]))
+idldecl = Rule("⋅ left-identity", f, App(:cmp, [idA,f]))
+idrdecl = Rule("⋅ right-identity", f, App(:cmp, [f,idB]))
 ascdecl = Rule("⋅ associativity", f_gh, fg_h)
 
 cwf = Theory([ctxdecl,homdecl], [iddecl,cmpdecl], [idldecl,idrdecl,ascdecl], "cwf1")
@@ -39,12 +32,12 @@ cwf = Theory([ctxdecl,homdecl], [iddecl,cmpdecl], [idldecl,idrdecl,ascdecl], "cw
 ####################
 
 empdecl = OpDecl(:emp, "⋅", Ctx, "The category C has a terminal object: the empty context")
-emp = mkApp(:emp)
-termsort = mkSort(:Hom, [Γ,emp])
-termΓ = mkApp(:empsubst, [Γ])
+emp = App(:emp)
+termsort = Sort(:Hom, [Γ,emp])
+termΓ = App(:empsubst, [Γ])
 termdecl = OpDecl(:empsubst, "!({})", termsort, [Γ], "Substitution into an empty context ")
 
-anyTermΓ = mkVar(:η, termsort)
+anyTermΓ = Var(:η, termsort)
 termundecl = Rule("! unique", "Substitution into an empty context is unique.", termΓ, anyTermΓ, )
 
 cwf = extend(cwf, [], [empdecl,termdecl], [termundecl], "cwf2")
@@ -52,22 +45,22 @@ cwf = extend(cwf, [], [empdecl,termdecl], [termundecl], "cwf2")
 ###############
 # TYPE LEVELS #
 ###############
-Size = mkSort(:lvl)
+Size = Sort(:lvl)
 sizedecl = SortDecl(:lvl, "Hierarchy of type universes")
-Zero = mkApp(:zero)
+Zero = App(:zero)
 zerodecl = OpDecl(:zero, "0", Size, "Type level of sets")
-α, β, α′ = [mkVar(x, Size) for x in [:α,:β,:α′]]
+α, β, α′ = [Var(x, Size) for x in [:α,:β,:α′]]
 
 sucdecl = OpDecl(:suc, "{}+1", Size, [α], "Successor")
-αβ, αα′, α′β, = [mkSort(:lt, x) for x in [[α,β],[α,α′],[α′,β]]]
+αβ, αα′, α′β, = [Sort(:lt, x) for x in [[α,β],[α,α′],[α′,β]]]
 orddecl = SortDecl(:lt, "{}<{}", [α,β], "A witness to the relative ordering of two universes in the type hierarchy")
-p, p′, q, r = [mkVar(x, y) for (x, y) in zip([:p,:p′,:q,:r], [αβ,αβ,αα′,α′β])]
+p, p′, q, r = [Var(x, y) for (x, y) in zip([:p,:p′,:q,:r], [αβ,αβ,αα′,α′β])]
 
 
-ltzdecl = OpDecl(:ltz, "0 < {}+1", mkSort(:lt, [Zero,mkApp(:suc, [α])]), [α], "Every rank's successor is greater than 0")
-ltsdecl = OpDecl(:lts, "{1} < {1}+1", mkSort(:lt, [α,mkApp(:suc, [α])]), [α], "Every rank's successor is greater than itself")
+ltzdecl = OpDecl(:ltz, "0 < {}+1", Sort(:lt, [Zero,App(:suc, [α])]), [α], "Every rank's successor is greater than 0")
+ltsdecl = OpDecl(:lts, "{1} < {1}+1", Sort(:lt, [α,App(:suc, [α])]), [α], "Every rank's successor is greater than itself")
 
-ltldecl = OpDecl(:ltlift, "({})+1", mkSort(:lt, [mkApp(:suc, [α]),mkApp(:suc, [β])]), [p], "Successor relation preserves ordering")
+ltldecl = OpDecl(:ltlift, "({})+1", Sort(:lt, [App(:suc, [α]),App(:suc, [β])]), [p], "Successor relation preserves ordering")
 
 ordunidecl = Rule("Ord unique", "The sort α<β is a singleton", p, p′)
 sizetrandec = OpDecl(:⪡, "binary", αβ, [q,r], "< transitivity")
@@ -79,10 +72,10 @@ cwf = extend(cwf, [sizedecl,orddecl], [sucdecl,zerodecl,ltzdecl, ltsdecl,
 # TYPES AND ELEMENTS #
 ######################
 Tydecl = SortDecl(:Ty, "Ty{}({})", [α,Γ], "The sort of types in context Γ (of size α)")
-TyΓα, TyΔα = [mkSort(:Ty, [α,Γ]), mkSort(:Ty, [α,Δ])]
-TyΓβ = mkSort(:Ty, [β,Γ])
-AyΓα = mkVar(:A, TyΓα)
-elΓA = mkSort(:el, [Γ,AyΓα])
+TyΓα, TyΔα = [Sort(:Ty, [α,Γ]), Sort(:Ty, [α,Δ])]
+TyΓβ = Sort(:Ty, [β,Γ])
+AyΓα = Var(:A, TyΓα)
+elΓA = Sort(:el, [Γ,AyΓα])
 Eldecl = SortDecl(:el, "𝐄𝐥({}⊢{})", [Γ, AyΓα], "The sort of terms of type A (in ctx Γ), where A is of size α
  'This is to fix a dependent presheaf El: Psh(ctx)/Tyα, i.e. a nat. trans. π: El→Tyα'")
 
@@ -90,33 +83,33 @@ Tyactdecl = OpDecl(:Tyact, "{}[{}]",TyΔα,[AyΓα, γ],
         "Substitution action: apply the substitution γ (of type Δ→Γ) to a some type A (in ctx Γ) to obtain a term of type Δ")
 
 
-tyfunc1decl = Rule("Ty identity", "Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type", AyΓα, mkApp(:Tyact, [AyΓα,idΓ]))
+tyfunc1decl = Rule("Ty identity", "Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type", AyΓα, App(:Tyact, [AyΓα,idΓ]))
 
-δγ = mkApp(:cmp, [δ,γ])
-t2t1 = mkApp(:Tyact, [AyΓα,δγ])
-AyΓαγ = mkApp(:Tyact, [AyΓα,γ])
-t2t2 = mkApp(:Tyact, [AyΓαγ,δ])
+δγ = App(:cmp, [δ,γ])
+t2t1 = App(:Tyact, [AyΓα,δγ])
+AyΓαγ = App(:Tyact, [AyΓα,γ])
+t2t2 = App(:Tyact, [AyΓαγ,δ])
 
 tyfunc2decl = Rule("Ty preserves composition", """The functor to Fam from C preserves composition of substitutions:
 applying two substitutions in sequence is the same as applying the composition of the substitutions in C""",
 t2t1,t2t2)
 
 
-a = mkVar(:a, elΓA)
-ElΔAγ = mkSort(:el, [Δ,AyΓαγ])
+a = Var(:a, elΓA)
+ElΔAγ = Sort(:el, [Δ,AyΓαγ])
 
 Elactdecl = OpDecl(:Elact, "{}[{}]",ElΔAγ,[a,γ], """
     Substitution action: apply the substitution γ (of type Δ→Γ) to a term of type A (in ctx Γ)
     Result: a term of type A[γ] (in ctx Δ)""")
 
-elid2 = mkApp(:Elact, [a,idΓ])
+elid2 = App(:Elact, [a,idΓ])
 eliddecl = Rule("Term substitution identity",
     "The identity substitution on a term yields the same term", a, elid2)
 
 elcompdecl = Rule("Term substitution composition","""
     The functor to Fam from C preserves composition of substitutions:
     Applying two substitutions in sequence is the same as applying the composition of the substitutions in C""",
-    mkApp(:Elact, [a,δγ]), mkApp(:Elact, [mkApp(:Elact, [a,γ]),δ]))
+    App(:Elact, [a,δγ]), App(:Elact, [App(:Elact, [a,γ]),δ]))
 
 cwf = extend(cwf, [Tydecl,Eldecl], [Tyactdecl,Elactdecl], [tyfunc1decl,tyfunc2decl, eliddecl, elcompdecl], "cwf4")
 
@@ -125,21 +118,21 @@ cwf = extend(cwf, [Tydecl,Eldecl], [Tyactdecl,Elactdecl], [tyfunc1decl,tyfunc2de
 # #########################
 # # CONTEXT COMPREHENSION #
 # #########################
-ΓA = mkApp(:ext, [Γ,AyΓα])
+ΓA = App(:ext, [Γ,AyΓα])
 ctxcmpdecl = OpDecl(:ext, "({}.{})", Ctx,[Γ,AyΓα],
                     "Context compreshension operation")
-N = mkVar(:N, ElΔAγ)
-snocdecl = OpDecl(:snoc, "⟨{},{}⟩", mkSort(:Hom, [Δ,ΓA]), [γ,N], "???")
-Pdecl = OpDecl(:p, "𝐩({})", mkSort(:Hom, [ΓA,Γ]), [AyΓα], "Projection function 'drop'???")
-P = mkApp(:p, [AyΓα])
-TyAp = mkApp(:Tyact, [AyΓα,P])
-Qdecl = OpDecl(:q, "𝐪({})", mkSort(:el, [ΓA,TyAp]), [AyΓα], "Projection function 'var'???")
-Q = mkApp(:q, [AyΓα])
-peq = Rule("Universal property of 𝐩", γ, mkApp(:cmp, [mkApp(:snoc, [γ,N]),P]))
-qeq = Rule("Universal property of 𝐪", N, mkApp(:Elact, [Q,mkApp(:snoc, [γ,N])]))
-pqeq = Rule("𝐩𝐪 property", mkApp(:id, [ΓA]), mkApp(:snoc, [P,Q]))
-cct1 = mkApp(:cmp, [δ,mkApp(:snoc, [γ,N])])
-cct2 = mkApp(:snoc, [mkApp(:cmp, [δ,γ]), mkApp(:Elact, [N,δ])])
+N = Var(:N, ElΔAγ)
+snocdecl = OpDecl(:snoc, "⟨{},{}⟩", Sort(:Hom, [Δ,ΓA]), [γ,N], "???")
+Pdecl = OpDecl(:p, "𝐩({})", Sort(:Hom, [ΓA,Γ]), [AyΓα], "Projection function 'drop'???")
+P = App(:p, [AyΓα])
+TyAp = App(:Tyact, [AyΓα,P])
+Qdecl = OpDecl(:q, "𝐪({})", Sort(:el, [ΓA,TyAp]), [AyΓα], "Projection function 'var'???")
+Q = App(:q, [AyΓα])
+peq = Rule("Universal property of 𝐩", γ, App(:cmp, [App(:snoc, [γ,N]),P]))
+qeq = Rule("Universal property of 𝐪", N, App(:Elact, [Q,App(:snoc, [γ,N])]))
+pqeq = Rule("𝐩𝐪 property", App(:id, [ΓA]), App(:snoc, [P,Q]))
+cct1 = App(:cmp, [δ,App(:snoc, [γ,N])])
+cct2 = App(:snoc, [App(:cmp, [δ,γ]), App(:Elact, [N,δ])])
 compcomp = Rule("Comp comp", cct1, cct2)
 
 cwf = extend(cwf, [], [ctxcmpdecl,snocdecl,Pdecl,Qdecl], [peq,qeq,pqeq,compcomp], "cwf5")
@@ -148,45 +141,45 @@ cwf = extend(cwf, [], [ctxcmpdecl,snocdecl,Pdecl,Qdecl], [peq,qeq,pqeq,compcomp]
 # Algebraic cumulativity and lifting #
 #######################################
 liftdecl = OpDecl(:lift,"⇧({},{})", TyΓβ, [p,AyΓα],"Lifts a type of level α to some β>α")
-Lift = mkApp(:lift, [p, AyΓα])
+Lift = App(:lift, [p, AyΓα])
 liftsubdecl = Rule("Lift substitution",
-                    mkApp(:lift,[p,AyΓαγ]), mkApp(:Tyact, [Lift, γ]))
-liftcmpdecl = Rule("Lift composition", Lift, mkApp(:lift,[r, mkApp(:lift,[q,AyΓα])]))
+                    App(:lift,[p,AyΓαγ]), App(:Tyact, [Lift, γ]))
+liftcmpdecl = Rule("Lift composition", Lift, App(:lift,[r, App(:lift,[q,AyΓα])]))
 
 
-lifteldecl = Rule("Element lifting",elΓA ,mkSort(:el, [Γ,Lift]))
-liftctxdecl = Rule("Context lifting", ΓA, mkApp(:ext,[Γ,Lift]))
+lifteldecl = Rule("Element lifting",elΓA ,Sort(:el, [Γ,Lift]))
+liftctxdecl = Rule("Context lifting", ΓA, App(:ext,[Γ,Lift]))
 cwf = extend(cwf, [], [liftdecl], [liftsubdecl, liftcmpdecl,
              lifteldecl, liftctxdecl], "cwf6")
 
 ##############################
 # Type theoretic connectives #
 ##############################
-B = mkVar(:B, mkSort(:Ty, [α,ΓA]))
+B = Var(:B, Sort(:Ty, [α,ΓA]))
 pidecl = OpDecl(:Pi, "Π({},{})", TyΓα, [AyΓα,B], "Π formation")
 
-ΠAB = mkApp(:Pi, [AyΓα,B])
-lamsort = mkSort(:el, [Γ,ΠAB])
-M = mkVar(:M, mkSort(:el, [ΓA,B]))
-lamM = mkApp(:lam,[M])
+ΠAB = App(:Pi, [AyΓα,B])
+lamsort = Sort(:el, [Γ,ΠAB])
+M = Var(:M, Sort(:el, [ΓA,B]))
+lamM = App(:lam,[M])
 lamdecl = OpDecl(:lam, "λ({})", lamsort, [M], "Π introduction")
 
-liftB= mkApp(:lift,[p,B])
-pild2 = mkApp(:Pi, [Lift,liftB])
-piliftdecl = Rule("Π lifting", mkApp(:lift,[p,ΠAB]), pild2)
+liftB= App(:lift,[p,B])
+pild2 = App(:Pi, [Lift,liftB])
+piliftdecl = Rule("Π lifting", App(:lift,[p,ΠAB]), pild2)
 
-pisub22 = mkApp(:Tyact,[B,mkApp(:snoc,[mkApp(:cmp,[P,γ]),Q])])
-pisub2 = mkApp(:Pi,[AyΓαγ, pisub22])
-pisubdecl = Rule("Pi substitution", mkApp(:Tyact,[ΠAB,γ]), pisub2)
+pisub22 = App(:Tyact,[B,App(:snoc,[App(:cmp,[P,γ]),Q])])
+pisub2 = App(:Pi,[AyΓαγ, pisub22])
+pisubdecl = Rule("Pi substitution", App(:Tyact,[ΠAB,γ]), pisub2)
 
 
 cwf = extend(cwf, [], [pidecl, lamdecl], [pisubdecl,piliftdecl], "cwf7")
-print(render(cwf))
+# print(render(cwf))
 
 
-ΓliftA = mkApp(:ext,[Γ,Lift])
-nsort = mkVar(:N,mkSort(:el,[ΓliftA,liftB]))
-liftM = mkApp(:lam,[mkVar(:N,mkSort(:el,[ΓliftA,liftB]))])
+ΓliftA = App(:ext,[Γ,Lift])
+nsort = Var(:N,Sort(:el,[ΓliftA,liftB]))
+liftM = App(:lam,[Var(:N,Sort(:el,[ΓliftA,liftB]))])
 
 # INFER is constructing an ill-formed term with liftM
 # The lift operator is pointed to by node 6 and node 36

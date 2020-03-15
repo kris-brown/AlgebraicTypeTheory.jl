@@ -1,6 +1,6 @@
 module Boolean
 export boolalg
-using GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
 
 bool = Sort(:Bool)
 booldec = SortDecl(:Bool, "The underlying set of a boolean algebra")
@@ -35,8 +35,10 @@ distand, distor = [Rule("$op1 $op2 distributivity",
 topdef, botdef = [Rule("$op def",App(op),App(o2,[bX,App(:¬,[bX])])) for
     (op,o2) in [(:⊤,:∨),(:⊥,:∧)]]
 
-boolalg = Theory([booldec], [negdec, landdec, lordec, topdecl, botdecl], [symand, symor, ascand, ascor, idenand, idenor, absand, absor,distand, distor,topdef, botdef],"BooleanAlgebra")
-print(render(boolalg))
+boolalg = Theory([booldec], [negdec, landdec, lordec, topdecl, botdecl],
+                 [symand, symor, ascand, ascor, idenand, idenor, absand,
+                  absor,distand, distor,topdef, botdef],"BooleanAlgebra")
+# print(render(boolalg))
 end
 """
 

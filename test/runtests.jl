@@ -7,3 +7,7 @@ end
 @testset "Term" begin
     include("testgraphterm.jl")
 end
+
+@testset "Inst" begin
+    include("testinst.jl")
+end

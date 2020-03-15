@@ -3,7 +3,7 @@ export rewrite,
     Term, Theory, SortDecl, OpDecl, Rule, validate,join_term,
     Sort, App,Var, mkPat, unPat,
     viz, simplerender, render, root, getkind, patmatch, sub,
-    infer, infer!, uninfer,
+    infer, infer!, uninfer, getsym,gethash,
     vars, getSig, extend, upgrade
 
 using MetaGraphs: MetaDiGraph, get_prop, has_prop, set_prop!, set_props!, set_indexing_prop!, props, filter_vertices
@@ -19,7 +19,7 @@ if isdefined(@__MODULE__, :LanguageServer)
     using .Graph
 else
     using AlgebraicTypeTheory.Graph
-    import AlgebraicTypeTheory.Graph: root, arity, viz, getkind, patmatch, sub, simplerender, uninfer
+    import AlgebraicTypeTheory.Graph: root, arity, viz, getkind, patmatch, sub, simplerender, uninfer, getsym, gethash
 end
 ############################################################################
 
@@ -104,19 +104,13 @@ Theory(s::Union{Nothing,Vector{SortDecl}}, o::Union{Nothing,Vector{OpDecl}}, r::
 )
 
 """Longest chain length"""
-function Base.length(t::Term)::Int
-    len(t.g)
-end
+function Base.length(t::Term)::Int len(t.g) end
 
 function Base.show(io::IO, t::Term)::Nothing
     print(io, simplerender(t.g))
 end
-function Base.isless(x::Term, y::Term)::Bool
-    gethash(x.g) < gethash(y.g)
-end
-function Base.:(==)(x::Term, y::Term)::Bool
-    gethash(x.g) == gethash(y.g)
-end
+function Base.isless(x::Term, y::Term)::Bool gethash(x) < gethash(y) end
+function Base.:(==)(x::Term, y::Term)::Bool gethash(x) == gethash(y) end
 function Base.isless(x::T, y::T)::Bool where {T<:Union{SortDecl,OpDecl}}
     x.sym < y.sym
 end
@@ -125,7 +119,7 @@ function Base.isless(x::Rule, y::Rule)::Bool
 end
 """Total # of nodes"""
 function Base.size(t::Term)::Int nv(t.g) end
-function Base.hash(t::Term)::UInt64 hash(gethash(t.g)) end
+function Base.hash(t::Term)::UInt64 hash(gethash(t)) end
 function Base.hash(r::Rule)::UInt64
     sum([hash(r.name), hash(r.desc), hash(r.t1), hash(r.t2)])
 end
@@ -133,9 +127,8 @@ function Base.hash(r::SortDecl)::UInt64
     sum([hash(r.sym), hash(r.pat), hash(r.desc), [hash(a) for a in r.args]...])
 end
 function Base.hash(r::OpDecl)::UInt64
-    sum(vcat(
-        [hash(r.sym), hash(r.pat), hash(r.sort), hash(r.desc)],
-        [hash(a) for a in r.args],
+    sum(vcat([hash(r.sym), hash(r.pat), hash(r.sort), hash(r.desc)],
+             [hash(a) for a in r.args],
     ))
 end
 
@@ -149,18 +142,12 @@ end
 function simplerender(t::Term)::String
     simplerender(t.g)
 end
-function getkind(t::Term)::NodeType
-    getkind(t.g, root(t))
-end
-function arity(t::Term)::Int
-    arity(t.g, root(t))
-end
-function patmatch(p::Term, x::Term)
-    patmatch(p.g, x.g)
-end
-function sub(p::Term, m::MatchDict)::Term
-    Term(sub(p.g, m))
-end
+function gethash(t::Term, short::Bool=false)::String gethash(t.g, root(t), short) end
+function getkind(t::Term)::NodeType getkind(t.g, root(t)) end
+function getsym(t::Term)::Symbol getsym(t.g, root(t)) end
+function arity(t::Term)::Int arity(t.g, root(t)) end
+function patmatch(p::Term, x::Term) patmatch(p.g, x.g) end
+function sub(p::Term, m::MatchDict)::Term Term(sub(p.g, m)) end
 ############################################################################
 """Normally, for t2->t1, we need FreeVar(t1)⊆FreeVar(t2), however there is an edge case which breaks this
 Consider ∀x,y∈X: x=y, asserting that X is singleton. The freevars do not intersect, but we can still
@@ -295,7 +282,7 @@ function validate(g::MetaDiGraph)::MetaDiGraph
             @assert length(ns) == 2 "SortedTerm has two children, not $(length(ns))"
             @assert getkind(g, sta1) == SortNode "First arg of SortedTerm is a sort $(getkind(g, sta1))"
             if !(getkind(g, sta2) in [AppNode, VarNode, WildCard])
-                println("Error with $(simplerender(g))")
+                #println("Error with $(simplerender(g))")
                 viz(g, true, false, "sortedtermerror")
             end
             @assert getkind(g, sta2) in [AppNode, VarNode, WildCard] "Second arg of SortedTerm is Var/App/WildCard: $(getkind(g, sta2))"
@@ -496,7 +483,7 @@ function infer(th::Theory, t::Term)::Term
 end
 
 function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
-    println("STARTING INFER W/ $(simplerender(g))")
+    # println("STARTING INFER W/ $(simplerender(g))")
     seen = Set{String}()
     preferred = sort(collect(vertices(g)))  # when reindexing, default to these values
     first(g.indices) # make sure we have :hash index
@@ -517,7 +504,7 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
         sym, kind = [get_prop(g, n, x) for x in [:sym, :kind]]
         viewhsh = gethash(g, n, true)
         inds = [x[1:3] for x in seen]
-        println("$viewhsh $sym $kind seen $(sort(inds))")
+        # println("$viewhsh $sym $kind seen $(sort(inds))")
         if kind == VarNode
             sorti = neighbors(g, n)[1]
         elseif kind == AppNode
@@ -549,7 +536,7 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
             for i in traverse(g, sorti)
                 ghi = gethash(g, i)
                 if !(ghi in seen)
-                    println("\tadding $(ghi[1:3]) from sort")
+                    # println("\tadding $(ghi[1:3]) from sort")
                     push!(seen, gethash(g, i))
                     if getkind(g,i)==SortedTerm
                         child = getarg(g,i,2)
@@ -572,13 +559,13 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
         if kind in [AppNode, VarNode]
             st = add_vertprop!(g, Dict(:kind => SortedTerm, :sym => Symbol()))
             set_indexing_prop!(g, st, :hash, compute_hash(g, st))
-            println("$n: add $st ")
+            # println("$n: add $st ")
             if n == root(g)
                 @assert set_prop!(g, :root, st)
             else
-                println("\t$n $sym inneighbors $(collect(inneighbors(g, n)))")
+                # println("\t$n $sym inneighbors $(collect(inneighbors(g, n)))")
                 for i in collect(inneighbors(g, n))
-                    println("\t$(getkind(g, i)) adding $i->$st ($(getkind(g, st))) and removing $i->$n ($(getkind(g, n)))")
+                    # println("\t$(getkind(g, i)) adding $i->$st ($(getkind(g, st))) and removing $i->$n ($(getkind(g, n)))")
                     @assert add_edgeprop!(g, i, st, get_prop(g, i, n, :args))
                     @assert getkind(g, n) in [AppNode, VarNode, WildCard]
                     @assert rem_edge!(g, i, n)
@@ -588,7 +575,7 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
             @assert add_edgeprop!(g, st, n, [2])
         end
 
-        println("adding $(gethash(g, n,true)) ")
+        # println("adding $(gethash(g, n,true)) ")
 
         push!(seen, gethash(g, n))
         seeninds = Set([v for v in vertices(g) if gethash(g, v) in seen])
@@ -639,8 +626,10 @@ function extend(
     #  has $(length(ss)) sorts $(length(os)) ops $(length(rs)) rules ")
     return Theory(ss, os, rs, isempty(n) ? t1.name : n)
 end
-##############################################################################
 
+####################################
+# Visualization of data structures #
+####################################
 
 function Base.show(io::IO, x::OpDecl)
     printfmt(io, "OPDECL {}", x.pat)
@@ -679,7 +668,7 @@ function printRule(top::String, bot::String, name::String, desc::String)::String
     return out
 end
 
-function render(x::Theory)::String
+function render(x::Theory, prnt::Bool=false)::String
     function box(s::String)::Vector{String}
         line = '#'^(length(s) + 4)
         return [join([line, string("# ", s, " #"), line], "\n")]
@@ -697,37 +686,46 @@ function render(x::Theory)::String
         box("Equality Axioms"),
         [render(x, z) for z in sort(collect(x.rules))]...,
     )
-    return (join(judgments, "\n\n"))
+    out = (join(judgments, "\n\n"))
+    if prnt println(out) end
+    return out
 end
 
-function render(t::Theory, x::SortDecl)::String
+function render(t::Theory, x::SortDecl, prnt::Bool=false)::String
     top = render(t, getSig(x))
     if isempty(x.args)
         bot = string(x.pat)
     else
         bot = format(x.pat, [render(t, q) for q in x.args]...)
     end
-
-    return printRule(top, string(bot, "  sort"), string(x.sym), x.desc)
+    out = printRule(top, string(bot, "  sort"), string(x.sym), x.desc)
+    if prnt println(out) end
+    return out
 end
-function render(t::Theory, x::Premises)::String
+function render(t::Theory, x::Premises, prnt::Bool=false)::String
     sorts = sort(unique(collect(values(x.premises))))
     dic = Dict(
         [join([string(k) for (k, v) in sort(x.premises) if v == s], ",") => render(t, s) for
         s in sorts],
     )
-    return join([string(k, ":", v) for (k, v) in dic], "  ")
+    out = join([string(k, ":", v) for (k, v) in dic], "  ")
+    if prnt println(out) end
+    return out
 end
-function render(t::Theory, x::OpDecl)::String
+function render(t::Theory, x::OpDecl, prnt::Bool=false)::String
     top = render(t, getSig(x))
     sor = render(t, x.sort)
     bot = string(format(x.pat, [render(t, z) for z in x.args]...), " : ", sor)
-    return printRule(top, bot, string(x.sym), x.desc)
+    out = printRule(top, bot, string(x.sym), x.desc)
+    if prnt println(out) end
+    return out
 end
-function render(t::Theory, x::Term)::String
-    render(t, x.g)
+function render(t::Theory, x::Term, prnt::Bool=false)::String
+    out = render(t, x.g)
+    if prnt println(out) end
+    return out
 end
-function render(t::Theory, g::MetaDiGraph, n::Int = 0)::String
+function render(t::Theory, g::MetaDiGraph, n::Int = 0, prnt::Bool=false)::String
     n = n == 0 ? root(g) : n
     kind = getkind(g, n)
     sym = getsym(g, n)
@@ -738,26 +736,30 @@ function render(t::Theory, g::MetaDiGraph, n::Int = 0)::String
         pat = decl.pat
         arty = length(decl.args)
         if arty == 0
-            return string(sym, isapp ? "()" : "")
+            out = string(sym, isapp ? "()" : "")
+        else
+            args = [render(t, g, getarg(g, n, i)) for i in 1:arty]
+            out = format(pat, args...)
         end
-
-        args = [render(t, g, getarg(g, n, i)) for i in 1:arty]
-        return format(pat, args...)
-    elseif kind in [VarNode, WildCard]
-        return string(sym)
+    elseif  kind in [VarNode, WildCard]
+        out = string(sym)
     elseif kind == SortedTerm
-        return render(t, g, getarg(g, n, 2))
+        out = render(t, g, getarg(g, n, 2))
     else
         throw(DomainError)
     end
+    if prnt println(out) end
+    return out
 end
 
-function render(t::Theory, r::Rule)::String
+function render(t::Theory, r::Rule, prnt::Bool=false)::String
     rsort = subgraph(r.t1.g, getarg(r.t1.g, root(r.t1.g), 1))
     top = render(t, getSig(r))
     sortstr = getkind(r.t1) == SortNode ? "sort" : string(": ",render(t, rsort))
     bot = format("{} = {}   {}", render(t, r.t1), render(t, r.t2), sortstr)
-    return printRule(top, bot, r.name, r.desc)
+    out = printRule(top, bot, r.name, r.desc)
+    if prnt println(out) end
+    return out
 end
 ##############################################################################
 function getSig(x::SortDecl)::Premises

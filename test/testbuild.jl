@@ -1,17 +1,17 @@
-# using AlgebraicTypeTheory
-# using AlgebraicTypeTheory.Theories: monoid, Mul, Ob, eOp, cat, Hom, Cmp, id, cwf, cwf,compcomp
+using AlgebraicTypeTheory.GraphTerm: App, Sort, Var, infer, render, simplerender, uninfer
+using AlgebraicTypeTheory.Theories.Monoid: monoid
 
+"""
+Tests for the normalization of terms by repeatedly applying rewrite rules
+    from a theory. This is not currently operational since switching to graph
+    terms.
+"""
 # ##########################################################################################
-# cr = x -> print(render(cwf,x))
 
-# X,Y,Z,A,B,C,D = [Var(x, Ob) for x in [:X,:Y,:Z,:A,:B,:C,:D]]
-# id_term = App(eOp)
-# eqs = collect(monoid.eqs)
-# @test render(monoid) isa String
+# X,Y,Z,A,B,C,D = [Var(x, Sort(:Ob)) for x in [:X,:Y,:Z,:A,:B,:C,:D]]
+# id_term = App(:id)
+# eqs = monoid.rules
 
-
-
-# d1, d2 = map(degrade, [eqs[1].t1,eqs[1].t2])
 
 
 # t1, t2 = [buildTerm(monoid,x) for x in [d1,d2]]

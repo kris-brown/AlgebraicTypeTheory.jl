@@ -123,6 +123,13 @@ function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
     inds = [i == nothing ? length(nodecolor) : Int(i) for i in membership]
     nodefill = nodecolor[inds] # default to final color
     nodeshape = nodeshapes[inds]
+
+    if nv(g) < 5
+        pos = [(0,1),(-1,0),(1,0),(0,-1)][1:nv(g)]
+        locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
+
+    else
+
     # Create a tree from the DAG using Dijkstra's Algorithm
     d = dijkstra_shortest_paths(g,root(g),allpaths=true)
     g′ = copy(g)
@@ -139,14 +146,16 @@ function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
     adj = Array(g′.graph.fadjlist)
     pos = Buchheim.layout(adj)
     locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
-    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=100,INITTEMP=1.0)
+    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=20,INITTEMP=.1)
+
+    end
     scale = max(max(locs_x...)-min(locs_x...),max(locs_y...)-min(locs_y...))
     small = .03 * scale #heuristic for size of arrowheads
     nodes = scatter(;x=locs_x, y=locs_y,mode="markers+text",text=nodelabel,
                     hovertext = hovertext,
                     hovermode="closest", name="nodes",
                     marker=attr(symbol=nodeshape,size=30,color=nodefill),
-                    hoverinfo=(ids||hashs) ? "text+hovertext" : "none")
+                    hoverinfo=(ids&&hashs) ? "none" : "text+hovertext")
 
     edge_traces = []
     for v in vertices(g)

@@ -35,7 +35,7 @@ rmj2 = rm_dups(rmj, Set{Int}()) # one of the star ends is merged with tail of th
 @test nv(rmj2) == 7
 @test ne(rmj2) == 7
 @test simplecycleslength(symmetrize(rmj2))[1][6] == 2 # one bidirectional cycle of size 6
-viz(rmj2,true,true,"")
+viz(rmj2,true,true,"", true)
 
 
 # Test topsort

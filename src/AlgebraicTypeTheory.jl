@@ -1,6 +1,6 @@
 module AlgebraicTypeTheory
-# include("Inst.jl")
-# include("theories/Theories.jl")
 include("Graph.jl")
 include("GraphTerm.jl")
+include("theories/Theories.jl")
+include("Inst.jl")
 end

@@ -1,6 +1,8 @@
 module Monoid
 export monoid
-using GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+
+using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+
 
 Ob = Sort(:Ob)
 obdecl = SortDecl(:Ob, "Underlying set of a monoid")
@@ -19,7 +21,7 @@ m_asc = Rule("mul associativity",
     App(:*, [X,App(:*, [Y,Z])]),App(:*, [App(:*, [X,Y]),Z]))
 
 monoid = Theory([obdecl], [mul,m_id],[m_idl, m_idr, m_asc],"Monoid")
-print(render(monoid))
+# print(render(monoid))
 end
 
 """

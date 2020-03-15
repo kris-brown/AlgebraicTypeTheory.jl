@@ -1,6 +1,6 @@
 module Preorder
 export preorder
-using GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
 
 obdecl = SortDecl(:ob, "Underlying set of preorder")
 A,B,C = [Var(x,Sort(:ob)) for x in [:A,:B,:C]]
@@ -10,7 +10,7 @@ p,q = [Var(x,y) for (x,y) in [:p=>ab,:q=>bc]]
 refl = OpDecl(:refl,"{}ᵣ",aa,[A],"Reflexivity")
 trans = OpDecl(:trans,"({}⪯{})",ac,[p,q],"Transitivity")
 preorder=Theory([obdecl,leqdecl],[refl,trans],Rule[],"Preorder")
-print(render(preorder))
+# print(render(preorder))
 end
 
 """
