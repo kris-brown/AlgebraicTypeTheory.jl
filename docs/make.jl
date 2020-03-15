@@ -1,7 +1,3 @@
-if isdefined(@__MODULE__, :LanguageServer)
-    include("../src/AlgebraicTypeTheory.jl")
-end
-
 using Documenter
 using Literate
 
