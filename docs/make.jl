@@ -47,20 +47,3 @@ makedocs(
   ]
 )
 
-withenv("GITHUB_EVENT_NAME" => "push",
-"GITHUB_REPOSITORY" => "JuliaDocs/Documenter.jl",
-"GITHUB_REF" => "refs/tags/v1.2.3",
-"GITHUB_ACTOR" => "github-actions",
-"GITHUB_TOKEN" => "${{ secrets.GITHUB_TOKEN }}",
-"DOCUMENTER_KEY" => nothing,
-) do
-
-@info "Deploying docs"
-deploydocs(
-  target = "build",
-  repo   = "github.com/kris-brown/AlgebraicTypeTheory.jl.git",
-  branch = "gh-pages",
-  deps   = nothing,
-  make   = nothing
-)
-end
