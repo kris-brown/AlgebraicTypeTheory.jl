@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>AlgebraicTypeTheory.jl · AlgebraicTypeTheory.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">AlgebraicTypeTheory.jl</span></div><form class="docs-search" action="search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>AlgebraicTypeTheory.jl</a><ul class="internal"><li><a class="tocitem" href="#Goals-1"><span>Goals</span></a></li><li><a class="tocitem" href="#Status-1"><span>Status</span></a></li><li><a class="tocitem" href="#Overview-1"><span>Overview</span></a></li></ul></li><li><span class="tocitem">Theories</span><ul><li><a class="tocitem" href="generated/theories/monoid/">Monoid</a></li><li><a class="tocitem" href="generated/theories/boolean/">Boolean Algebra</a></li><li><a class="tocitem" href="generated/theories/preorder/">Preorder</a></li><li><a class="tocitem" href="generated/theories/cat/">Categories</a></li><li><a class="tocitem" href="generated/theories/cwf/">Categories with Families</a></li><li><a class="tocitem" href="generated/theories/cwf_no_level/">Categories with Families (no universe levels)</a></li></ul></li><li><span class="tocitem">Core</span><ul><li><a class="tocitem" href="generated/core/graph/">Core datatypes</a></li><li><a class="tocitem" href="generated/core/graphterm/">Making instances</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>AlgebraicTypeTheory.jl</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>AlgebraicTypeTheory.jl</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/docs/src/index.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="AlgebraicTypeTheory.jl-1"><a class="docs-heading-anchor" href="#AlgebraicTypeTheory.jl-1">AlgebraicTypeTheory.jl</a><a class="docs-heading-anchor-permalink" href="#AlgebraicTypeTheory.jl-1" title="Permalink"></a></h1><p>Based on <a href="http://www.jonmsterling.com/pdfs/algebraic-type-theory-tutorial.pdf">this tutorial</a> and <a href="https://arxiv.org/abs/1902.08848">this paper</a> by Jonathan Sterling. This is just experimentation with ideas that might be useful for <a href="https://epatters.github.io/Catlab.jl/latest/">Catlab.jl</a>.</p><h2 id="Goals-1"><a class="docs-heading-anchor" href="#Goals-1">Goals</a><a class="docs-heading-anchor-permalink" href="#Goals-1" title="Permalink"></a></h2><p>The first purpose is to construct <em>theories</em>, which are collections of sort declarations, (term) operation declarations, and equality axioms (between sorts and/or terms).</p><p>The second purpose is to <em>instantiate</em> theories using Julia types and functions.</p><p>The next goal would be represent homomorphisms between theories and to be able to compose these to get new instances from old ones. Another would be to look at the structure of some theories and automatically infer some natural morphisms (e.g. an injection from a strictly smaller theory).</p><p>It also should be straightforward to use macros to make the writing of equations/theories more convenient. E.g.</p><pre><code class="language-none">   App(:mul, [
+      App(:mul, [
+         App(:mul, [
+               App(:mul, [
+                  App(:mul,[
+                     App(:id),
+                     X]),
+                  Y]),
+               Z]),
+         App(:id)]),
+      X])</code></pre><p>could be written as     @term (((((id()<em>X)</em>Y)<em>Z)</em>id())*X)</p><h2 id="Status-1"><a class="docs-heading-anchor" href="#Status-1">Status</a><a class="docs-heading-anchor-permalink" href="#Status-1" title="Permalink"></a></h2><p>Implementations for Boolean algebras, preorders, monoids, categories, and partially through the algebraicized Martin-Löf type theory that makes up the bulk of the tutorial linked above.</p><p>Current roadblock: in order to apply rewrite rules to an expression, we need to be able to infer its sort and the sorts of its subterms. This is done by simple pattern matching of expressions: an declaring an operation involves declaring a result sort pattern and term patterns for each argument - by matching terms, we can plug in to the sort pattern and get the result (incidentally, this is effectively type checking all terms we construct). However, the structure of a term is itself modulo the rewrite rules of the theory, so if there are rewrite rules on sorts or rewrite rules that change the structure of the sort of a term, then things that should be valid arguments will fail to pattern match. As of yet the only theory considered that cannot be fully formalized is the Dependent Types / Categories with Families example.</p><p>To address this, a rewriting algorithm needs to be implemented. Currently, we can rewrite a term by applying a particular rewrite rule at a particular point in the term graph, but what&#39;s needed is an algorithm which searches of the rules of a theory and repeatedly applies rewrite rules to get to a normal form (ideally the rewrite system is terminating and confluent).</p><h2 id="Overview-1"><a class="docs-heading-anchor" href="#Overview-1">Overview</a><a class="docs-heading-anchor-permalink" href="#Overview-1" title="Permalink"></a></h2><h3 id="Terms,-Patterns,-Rewrite-rules-1"><a class="docs-heading-anchor" href="#Terms,-Patterns,-Rewrite-rules-1">Terms, Patterns, Rewrite rules</a><a class="docs-heading-anchor-permalink" href="#Terms,-Patterns,-Rewrite-rules-1" title="Permalink"></a></h3><p>Take the theory of categories and create a term: <code>Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:A,Ob)]))</code> (using <code>Ob=Sort(:Ob)</code>)</p><style>
+.iframe li {
+  width: 100% !important;
+  height: 525 !important;
+}
+</style>
+
+<iframe id="igraph" scrolling="no" style="border:none;" seamless="seamless" src="http://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe><p>We can define composition by providing the output sort, <code>Sort(:Hom,[Var(:X,Ob),Var(:Z,Ob)])</code>. Here the variables actually are meant to be wildcards, so we can create a new symbol in our graph to mean &quot;something (arg #2) of a certain sort (arg #1)&quot; and let the &quot;something&quot; be matchable with anything.</p><iframe id="igraph" scrolling="no" style="border:none;" seamless="seamless" src="http://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe><p>The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are <code>Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])</code> and <code>Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])</code> (the variable names <code>m</code> and <code>n</code> only matter for printing out the operator declaration, and all that was important for <code>Y</code> was that it was the same the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can &quot;upgrade&quot; a term like <code>App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])</code>:</p><iframe id="igraph" scrolling="no" style="border:none;" seamless="seamless" src="http://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe><p>...to a &quot;sorted version&quot;:</p><iframe id="igraph" scrolling="no" style="border:none;" seamless="seamless" src="http://web.stanford.edu/~ksb/docs/idfinferred.html" height="525" width="100%"></iframe><p>We can then create pattern out of this and <code>f</code> by itself to make a rule: <code>Rule(&quot;⋅ left-identity&quot;, f, App(:cmp, [idA,f]))</code> which can perform the left rewrite identity on any graph term of an identity composed with something.</p><h3 id="Example-theory-1"><a class="docs-heading-anchor" href="#Example-theory-1">Example theory</a><a class="docs-heading-anchor-permalink" href="#Example-theory-1" title="Permalink"></a></h3><p>Sort declarations, term operation declarations, and axioms all can be rendered in plain text, and sorts/terms/patterns may as viewed as term graphs. For example, this fragment of categories with families + dependent types.</p><pre><code class="language-none">
+################################
+# ******* Theory: cwf ******* #
+################################
+
+4 sorts, 13 ops, 14 rules
+
+#########
+# Sorts #
+#########
+
+==================================================
+
+---------   Ctx
+Ctx  sort
+
+Contexts: Concretely, a mapping xᵢ:Xᵢ of free variables to types.
+Consider these as objects in a category C.
+
+
+==================================================
+   Γ:Ctx
+-----------   Ty
+Ty(Γ)  sort
+
+The sort of types in context Γ
+
+
+==================================================
+ A,B:Ctx
+---------   Hom
+A→B  sort
+
+Substitutions between contexts: concretely, a substitution bᵢ:βᵢ↦aᵢ:αᵢ.
+Consider these as morphisms in the category C.
+
+
+==================================================
+A:Ty(Γ)  Γ:Ctx
+--------------   el
+𝐄𝐥(Γ⊢A)  sort
+
+The sort of terms of type A (in ctx Γ), where A is of size α
+ &#39;This is to fix a dependent presheaf El: Psh(ctx)/Ty, i.e. a nat. trans. π: El→Ty&#39;
+
+
+##############
+# Operations #
+##############
+
+==================================================
+A:Ty(Γ)  Γ:Ctx
+--------------   ext
+ (Γ.A) : Ctx
+
+Context compreshension operation
+
+
+==================================================
+B:Ty((Γ.A))  A:Ty(Γ)  Γ:Ctx
+---------------------------   Pi
+      Π(A,B) : Ty(Γ)
+
+Π formation
+
+
+==================================================
+   A:Ctx
+-----------   id
+id(A) : A→A
+
+The identity morphism
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  Γ,Δ:Ctx
+-----------------------   Tyact
+     A[γ] : Ty(Δ)
+
+Substitution action: apply the substitution γ (of type Δ→Γ) to a some type A (in ctx Γ) to obtain a term of type Δ
+
+
+==================================================
+
+-------   emp
+⋅ : Ctx
+
+The category C has a terminal object: the empty context
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  Γ,Δ:Ctx  a:𝐄𝐥(Γ⊢A)
+----------------------------------   Elact
+        a[γ] : 𝐄𝐥(Δ⊢A[γ])
+
+Substitution action: apply the substitution γ (of type Δ→Γ) to a term of type A (in ctx Γ)
+Result: a term of type A[γ] (in ctx Δ)
+
+
+==================================================
+B:Ty((Γ.A))  A:Ty(Γ)  M:𝐄𝐥((Γ.A)⊢B)  Γ:Ctx
+------------------------------------------   lam
+           λ(M) : 𝐄𝐥(Γ⊢Π(A,B))
+
+Π introduction
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
+-------------------------------------   snoc
+           ⟨γ,N⟩ : Δ→(Γ.A)
+
+???
+
+
+==================================================
+B:Ty((Γ.A))  A:Ty(Γ)  M:𝐄𝐥(Γ⊢Π(A,B))  N:𝐄𝐥(Γ⊢A[id(Γ)])  Γ:Ctx
+-------------------------------------------------------------   app
+                𝐚𝐩𝐩(M,N) : 𝐄𝐥(Γ⊢B[⟨id(Γ),N⟩])
+
+Pi elimination via application
+
+
+==================================================
+f:A→B  g:B→C  A,B,C:Ctx
+-----------------------   cmp
+      (f⋅g) : A→C
+
+Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.
+
+
+==================================================
+    Γ:Ctx
+--------------   empsubst
+!(Γ) : Γ→emp()
+
+Substitution into an empty context
+
+
+==================================================
+A:Ty(Γ)  Γ:Ctx
+--------------   p
+𝐩(A) : (Γ.A)→Γ
+
+Projection function &#39;drop&#39;???
+
+
+==================================================
+     A:Ty(Γ)  Γ:Ctx
+------------------------   q
+𝐪(A) : 𝐄𝐥((Γ.A)⊢A[𝐩(A)])
+
+Projection function &#39;var&#39;???
+
+
+###################
+# Equality Axioms #
+###################
+
+==================================================
+  η:Γ→emp()  Γ:Ctx
+--------------------   ! unique
+!(Γ) = η   : Γ→emp()
+
+Substitution into an empty context is unique.
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
+----------------------------------------------   Comp comp
+     (δ⋅⟨γ,N⟩) = ⟨(δ⋅γ),N[δ]⟩   : Ξ→(Γ.A)
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  B:Ty((Γ.A))  M:𝐄𝐥((Γ.A)⊢B)  Γ,Δ:Ctx
+---------------------------------------------------   Lambda Substitution
+ λ(M)[γ] = M[⟨(𝐩(A)⋅γ),𝐪(A)⟩]   : 𝐄𝐥(Δ⊢Π(A,B)[γ])
+
+
+==================================================
+      γ:Δ→Γ  A:Ty(Γ)  B:Ty((Γ.A))  Γ,Δ:Ctx
+------------------------------------------------   Pi substitution
+Π(A,B)[γ] = Π(A[γ],B[⟨(𝐩(A)⋅γ),𝐪(A)⟩])   : Ty(Δ)
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  a:𝐄𝐥(Γ⊢A)  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
+-------------------------------------------   Term substitution composition
+   a[(δ⋅γ)] = a[γ][δ]   : 𝐄𝐥(Ξ⊢A[(δ⋅γ)])
+
+The functor to Fam from C preserves composition of substitutions:
+Applying two substitutions in sequence is the same as applying the composition of the substitutions in C
+
+
+==================================================
+A:Ty(Γ)  Γ:Ctx  a:𝐄𝐥(Γ⊢A)
+-------------------------   Term substitution identity
+a = a[id(Γ)]   : 𝐄𝐥(Γ⊢A)
+
+The identity substitution on a term yields the same term
+
+
+==================================================
+    A:Ty(Γ)  Γ:Ctx
+----------------------   Ty identity
+A = A[id(Γ)]   : Ty(Γ)
+
+Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
+--------------------------------   Ty preserves composition
+  A[(δ⋅γ)] = A[γ][δ]   : Ty(Ξ)
+
+The functor to Fam from C preserves composition of substitutions:
+applying two substitutions in sequence is the same as applying the composition of the substitutions in C
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
+-------------------------------------   Universal property of 𝐩
+      γ = (⟨γ,N⟩⋅𝐩(A))   : Δ→Γ
+
+
+==================================================
+γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
+-------------------------------------   Universal property of 𝐪
+   N = 𝐪(A)[⟨γ,N⟩]   : 𝐄𝐥(Δ⊢A[γ])
+
+
+==================================================
+f:A→B  g:B→C  A,B,C,D:Ctx  h:C→D
+--------------------------------   ⋅ associativity
+ ((f⋅g)⋅h) = (f⋅(g⋅h))   : A→D
+
+
+==================================================
+   f:A→B  A,B:Ctx
+---------------------   ⋅ left-identity
+f = (id(A)⋅f)   : A→B
+
+
+==================================================
+   f:A→B  A,B:Ctx
+---------------------   ⋅ right-identity
+f = (f⋅id(B))   : A→B
+
+
+==================================================
+            A:Ty(Γ)  Γ:Ctx
+---------------------------------------   𝐩𝐪 property
+id((Γ.A)) = ⟨𝐩(A),𝐪(A)⟩   : (Γ.A)→(Γ.A)</code></pre><h3 id="Computing-with-GATs-1"><a class="docs-heading-anchor" href="#Computing-with-GATs-1">Computing with GATs</a><a class="docs-heading-anchor-permalink" href="#Computing-with-GATs-1" title="Permalink"></a></h3><p>We can define an instance of a theory by mapping (possibly parameterized) types to sorts and functions to the term operations.</p></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="generated/theories/monoid/">Monoid »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 15 March 2020 21:48">Sunday 15 March 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
