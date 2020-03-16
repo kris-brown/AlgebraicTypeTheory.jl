@@ -9,9 +9,9 @@ So far, encoding material from [this tutorial](http://www.jonmsterling.com/pdfs/
 
 - [x] To *instantiate* theories using Julia types and functions, so that terms of the theory can be concretely evaluated.
 
-- [  ] Test (by exhaustive or random search) that instances of theories satisfy their axioms
+- [ \ ] To use a theory to rewrite terms of that theory in a normal form.
 
-- [  ] To use a theory to rewrite terms of that theory in a normal form.
+- [  ] Test (by exhaustive or random search) that instances of theories satisfy their axioms
 
 - [  ] To represent homomorphisms between theories and to be able to compose these to get new instances from old ones.
 
@@ -38,10 +38,6 @@ could be written as `@term (((((id() * X) * Y) * Z) * id()) * X)`
 ## Status
 
 Theories: implementations for [Boolean algebras](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Boolean.jl), [preorders](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Preorder.jl), [monoids](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Monoid.jl), [categories](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cat.jl), an [algebraicized Martin-Löf type theory](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cwf_no_level.jl) (not complete yet).
-
-Current roadblock: in order to apply rewrite rules to an expression, we need to be able to infer its sort and the sorts of its subterms. This is done by simple pattern matching of expressions: an declaring an operation involves declaring a result sort pattern and term patterns for each argument - by matching terms, we can plug in to the sort pattern and get the result (also effectively typechecking all terms). However, the structure of a term is itself modulo the rewrite rules of the theory, so if there are rewrite rules on sorts or rewrite rules that change the structure of the sort of a term, then things that should be valid arguments will fail to pattern match. As of yet the only theory considered that cannot be fully formalized is the Dependent Types / Categories with Families example.
-
-To address this, a rewriting algorithm needs to be implemented. Currently, we can rewrite a term by applying a particular rewrite rule at a particular point in the term graph, but what's needed is an algorithm which searches of the rules of a theory and repeatedly applies rewrite rules to get to a normal form (ideally the rewrite system is terminating and confluent).
 
 ## Overview
 
@@ -143,14 +139,6 @@ B:Ty((Γ.A))  A:Ty(Γ)  Γ:Ctx
 
 
 ==================================================
-   A:Ctx
------------   id
-id(A) : A→A
-
-The identity morphism
-
-
-==================================================
 γ:Δ→Γ  A:Ty(Γ)  Γ,Δ:Ctx
 -----------------------   Tyact
      A[γ] : Ty(Δ)
@@ -184,20 +172,11 @@ B:Ty((Γ.A))  A:Ty(Γ)  M:𝐄𝐥((Γ.A)⊢B)  Γ:Ctx
 
 
 ==================================================
-γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
--------------------------------------   snoc
-           ⟨γ,N⟩ : Δ→(Γ.A)
-
-???
-
-
-==================================================
 B:Ty((Γ.A))  A:Ty(Γ)  M:𝐄𝐥(Γ⊢Π(A,B))  N:𝐄𝐥(Γ⊢A[id(Γ)])  Γ:Ctx
 -------------------------------------------------------------   app
                 𝐚𝐩𝐩(M,N) : 𝐄𝐥(Γ⊢B[⟨id(Γ),N⟩])
 
 Pi elimination via application
-
 
 ==================================================
 f:A→B  g:B→C  A,B,C:Ctx
@@ -206,7 +185,6 @@ f:A→B  g:B→C  A,B,C:Ctx
 
 Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.
 
-
 ==================================================
     Γ:Ctx
 --------------   empsubst
@@ -214,14 +192,12 @@ Composition, only defined for pairs of morphisms that match head-to-tail, is an 
 
 Substitution into an empty context
 
-
 ==================================================
 A:Ty(Γ)  Γ:Ctx
 --------------   p
 𝐩(A) : (Γ.A)→Γ
 
 Projection function 'drop'???
-
 
 ==================================================
      A:Ty(Γ)  Γ:Ctx
@@ -234,32 +210,21 @@ Projection function 'var'???
 ###################
 # Equality Axioms #
 ###################
-
 ==================================================
   η:Γ→emp()  Γ:Ctx
 --------------------   ! unique
 !(Γ) = η   : Γ→emp()
 
 Substitution into an empty context is unique.
-
-
-==================================================
-γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
-----------------------------------------------   Comp comp
-     (δ⋅⟨γ,N⟩) = ⟨(δ⋅γ),N[δ]⟩   : Ξ→(Γ.A)
-
-
 ==================================================
 γ:Δ→Γ  A:Ty(Γ)  B:Ty((Γ.A))  M:𝐄𝐥((Γ.A)⊢B)  Γ,Δ:Ctx
 ---------------------------------------------------   Lambda Substitution
  λ(M)[γ] = M[⟨(𝐩(A)⋅γ),𝐪(A)⟩]   : 𝐄𝐥(Δ⊢Π(A,B)[γ])
 
-
 ==================================================
       γ:Δ→Γ  A:Ty(Γ)  B:Ty((Γ.A))  Γ,Δ:Ctx
 ------------------------------------------------   Pi substitution
 Π(A,B)[γ] = Π(A[γ],B[⟨(𝐩(A)⋅γ),𝐪(A)⟩])   : Ty(Δ)
-
 
 ==================================================
 γ:Δ→Γ  A:Ty(Γ)  a:𝐄𝐥(Γ⊢A)  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
@@ -268,63 +233,15 @@ Substitution into an empty context is unique.
 
 The functor to Fam from C preserves composition of substitutions:
 Applying two substitutions in sequence is the same as applying the composition of the substitutions in C
-
-
-==================================================
-A:Ty(Γ)  Γ:Ctx  a:𝐄𝐥(Γ⊢A)
--------------------------   Term substitution identity
-a = a[id(Γ)]   : 𝐄𝐥(Γ⊢A)
-
-The identity substitution on a term yields the same term
-
-
-==================================================
-    A:Ty(Γ)  Γ:Ctx
-----------------------   Ty identity
-A = A[id(Γ)]   : Ty(Γ)
-
-Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type
-
-
-==================================================
-γ:Δ→Γ  A:Ty(Γ)  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
---------------------------------   Ty preserves composition
-  A[(δ⋅γ)] = A[γ][δ]   : Ty(Ξ)
-
-The functor to Fam from C preserves composition of substitutions:
-applying two substitutions in sequence is the same as applying the composition of the substitutions in C
-
-
 ==================================================
 γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
 -------------------------------------   Universal property of 𝐩
       γ = (⟨γ,N⟩⋅𝐩(A))   : Δ→Γ
 
-
 ==================================================
 γ:Δ→Γ  A:Ty(Γ)  N:𝐄𝐥(Δ⊢A[γ])  Γ,Δ:Ctx
 -------------------------------------   Universal property of 𝐪
    N = 𝐪(A)[⟨γ,N⟩]   : 𝐄𝐥(Δ⊢A[γ])
-
-
-==================================================
-f:A→B  g:B→C  A,B,C,D:Ctx  h:C→D
---------------------------------   ⋅ associativity
- ((f⋅g)⋅h) = (f⋅(g⋅h))   : A→D
-
-
-==================================================
-   f:A→B  A,B:Ctx
----------------------   ⋅ left-identity
-f = (id(A)⋅f)   : A→B
-
-
-==================================================
-   f:A→B  A,B:Ctx
----------------------   ⋅ right-identity
-f = (f⋅id(B))   : A→B
-
-
 ==================================================
             A:Ty(Γ)  Γ:Ctx
 ---------------------------------------   𝐩𝐪 property

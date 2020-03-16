@@ -1,4 +1,5 @@
-module Cwf_no_level
+# module Cwf_no_level
+# export cwf
 using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, extend, infer, viz
 
 #############
@@ -133,7 +134,7 @@ elact_yopq = App(:Elact,[M,yopq])
 lamsubdecl = Rule("Lambda Substitution",elactλ,elact_yopq)
 
 MM = Var(:M,Sort(:el,[Γ,ΠAB]))
-NN = Var(:N,Sort(:el,[Γ,App(:Tyact,[AyΓ,idΓ])]))
+NN = Var(:N,Sort(:el,[Γ,AyΓ]))
 
 # TO MOVE ON, WE NEED TO INCORPORATE SUBSTITUTIONS (DEFINED UP TO THIS PT IN TIME)
 # IN THE TYPE INFERENCE PROCESS.
@@ -142,13 +143,13 @@ NN = Var(:N,Sort(:el,[Γ,App(:Tyact,[AyΓ,idΓ])]))
 
 snocNN=App(:snoc,[idΓ,NN])
 
-apps2 = App(:Tyact, [B, apps22])
+apps2 = App(:Tyact, [B, snocNN])
 appsort = Sort(:el,[Γ, apps2])
 appdecl = OpDecl(:app,"𝐚𝐩𝐩({},{})",appsort,[MM,NN], "Pi elimination via application")
 appMN = App(:app,[MM,NN])
 
 # WE ARE MISSING AppSubstitution,PiUnicity,PiComputation
-cwf = cwf_no_level = extend(cwf, [], [pidecl, lamdecl, appdecl], [pisubdecl,lamsubdecl], "cwf7")
+cwf = cwf_no_level = extend(cwf, [], [pidecl, lamdecl], [pisubdecl,lamsubdecl], "cwf7")
 # print(render(cwf))
 
 
@@ -164,13 +165,13 @@ appsdecl = Rule("App substitution",App(:Elact,[appMN,γ]),ad2)
 #####
 piu = App(:app,[App(:Elact,[MM,P]),Q])
 # piu cannot be inferred
-piudecl = Rule("Pi Unicity",MM,[App(:lam,piu)])
+# piudecl = Rule("Pi Unicity",MM,[App(:lam,[piu])])
 ######
 # this term cannot be inferred
-pi2=App(:Elact,[MM,snocNN])
-picdecl = Rule("Pi computation",appMN,pi2)
+# pi2=App(:Elact,[MM,snocNN])
+# picdecl = Rule("Pi computation",appMN,pi2)
 
-end
+#end
 """
 
 ################################
