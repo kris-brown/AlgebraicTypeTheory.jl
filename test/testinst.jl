@@ -37,10 +37,10 @@ f′ = mkFunc(fun) # create a JuliaFunction object
 # Parse the docstring
 @test f′.doc == "repeat the string y, x times"
 
-#Evaluate the serialized function with arguments
+#Evaluate with arguments
 @test eval(funcEval(f′, [3, "abc"])) == "abcabcabc"
 
-#Evaluate the serialized function with keyword arguments
+#Evaluate with keyword arguments
 @test eval(funcEval(f′, Dict(:y=>"abc", :x=>3))) == "abcabcabc"
 
 # #The JuliaFunction is actually a method, so we may need to discriminate which
@@ -51,7 +51,7 @@ f′′ = mkFunc(fun, [Int, Int]) # specify which method via types (otherwise th
 # Suppose we are in unknown environment, such that fun's meaning is uncertain
 function fun(x::Int,y::Int)::Nothing nothing  end
 @test eval(funcEval(f′′, Any[4,5])) == nothing
-@test eval(funcEval(f′′, Any[4,5], false)) == 20 # use the source code, not relying on dispatch to resolve "fun"
+@test eval(funcEval(f′′, Any[4,5], false)) == 20 # use the serialized source code (not relying on dispatch) to resolve "fun"
 
 
 #############
@@ -72,9 +72,6 @@ mul = mkFunc(intmul)
 
 imon = Instance(monoid, Dict(:Ob=>jint),Dict(:e=>one,:* => mul))
 
-
-
-# this works
 terms = [App(:*, [App(:e),App(:*, [Var(:y,Sort(:Ob)), Var(:x, Sort(:Ob))])]),
          App(:*, [App(:e),App(:*, [App(:e), App(:e)])]),
          App(:*, [Var(:x, Sort(:Ob)),App(:*, [Var(:x,Sort(:Ob)), App(:e)])])]

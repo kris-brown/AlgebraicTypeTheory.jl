@@ -11,3 +11,7 @@ end
 @testset "Inst" begin
     include("testinst.jl")
 end
+
+@testset "Norm" begin
+    include("testnorm.jl")
+end

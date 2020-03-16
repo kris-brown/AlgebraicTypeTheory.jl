@@ -3,8 +3,8 @@ export rewrite,
     Term, Theory, SortDecl, OpDecl, Rule, validate,join_term,
     Sort, App,Var, mkPat, unPat,
     viz, simplerender, render, root, getkind, patmatch, sub,
-    infer, infer!, uninfer, getsym,gethash,
-    vars, getSig, extend, upgrade
+    infer, infer!, uninfer, getsym, gethash,
+    vars, getSig, extend, upgrade,normalize
 
 using MetaGraphs: MetaDiGraph, get_prop, has_prop, set_prop!, set_props!, set_indexing_prop!, props, filter_vertices
 using AutoHashEquals: @auto_hash_equals
@@ -27,7 +27,7 @@ end
 Edges are annotated with args::[Int] to express multigraph properties
 """
 struct Term
-    g::MetaDiGraph{Int64,Float64}
+    g::MetaDiGraph
     Term(g) = new(validate(g))
 end
 
@@ -307,7 +307,7 @@ function validate(g::MetaDiGraph)::MetaDiGraph
 end
 ############################################################################
 function join_term(sym::Symbol, kind::NodeType, args::Vector{Term})::Term
-    base = MetaDiGraph{Int64,Float64}(1)
+    base = MetaDiGraph(1)
     h = bytes2hex(sha256(join([sym, kind, [gethash(x.g) for x in args]...])))
     set_props!(base, 1, Dict(:sym => sym, :kind => kind))
     set_prop!(base, :root, 1)
@@ -462,6 +462,11 @@ function upgrade(t::Theory, r::Rule)::Rule
 end
 
 ############################################################################
+function normalize(t::Theory,x::Term)::Term
+    res = rewrite(x.g, Tuple{MetaDiGraph,MetaDiGraph}[(mkPat(r.t1).g,mkPat(r.t2).g) for r in t.rules])
+    return Term(res)
+end
+############################################################################
 
 """Infer the sort of an appnode. Modify it to become a SortedNode
 We may need to use rewrite rules even at this step?
@@ -604,9 +609,9 @@ function uninfer(s::Rule)::Rule
 end
 ##############################################################################
 
-function rewrite(r::Rule, x::Term)::Term
-    Term(sub(r.t1, patmatch(r.t2, x.g)))
-end
+# function rewrite(r::Rule, x::Term)::Term
+#     Term(sub(r.t1, patmatch(r.t2, x.g)))
+# end
 ##############################################################################
 
 function sym_arity(op::T)::Int where {T<:Union{OpDecl,SortDecl}}

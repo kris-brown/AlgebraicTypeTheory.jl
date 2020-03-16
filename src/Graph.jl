@@ -1,49 +1,20 @@
 module Graph
+
 export Rewrite,
     simplerender, viz,
-    MatchDict,
-    merge_in,
-    traverse,
-    subgraph,
-    maxv,
-    arity, getarg,
-    patmatch,
-    sub,
-    rehash!,
-    rm_dups,
-    addhash,
+    MatchDict,Error,patmatch, sub,
+    merge_in,subgraph,
+    traverse,topsort, argwalk,
+    maxv, arity, getarg,root,
+    rehash!, rm_dups, addhash,hashindex,compute_hash,
     gethash, getsym, getkind,
     symmetrize,
-    NodeType,
-    VarNode,
-    AppNode,
-    SortNode,
-    WildCard,
-    SortedTerm,
-    add_vertprop!,
-    add_edgeprop!,
-    root,
-    Error,
-    compute_hash,
-    hashindex,
-    topsort,
-    argwalk
+    NodeType, VarNode, AppNode, SortNode, WildCard, SortedTerm,
+    add_vertprop!, add_edgeprop!,
+    rewrite_at_node,rewrite,rewrite_toplevel
 
-using LightGraphs:
-    star_digraph,
-    path_digraph,
-    nv,ne, adjacency_matrix,
-    vertices,
-    edges,
-    add_vertex!,
-    add_edge!,rem_edge!,
-    neighbors,
-    AbstractGraph,
-    rem_edge!,
-    has_edge,
-    inneighbors,dijkstra_shortest_paths
-using MetaGraphs:
-    MetaDiGraph, set_prop!, set_props!, props, filter_vertices, set_indexing_prop!, get_prop, has_prop
+using LightGraphs: star_digraph, path_digraph, nv,ne, adjacency_matrix, vertices, edges, add_vertex!, add_edge!,rem_edge!, neighbors, AbstractGraph, rem_edge!, has_edge, inneighbors,dijkstra_shortest_paths
+using MetaGraphs: MetaDiGraph, set_prop!, set_props!, props, filter_vertices, set_indexing_prop!, get_prop, has_prop
 using Colors: @colorant_str
 using GraphPlot: spring_layout
 using Random: rand, randstring
@@ -52,14 +23,11 @@ using SHA: sha256
 using NetworkLayout:Buchheim
 using LinearAlgebra: normalize, norm
 using Formatting: format
+using DataStructures: OrderedDict
 ############################################################################
 # TYPES #
 #########
 """Take structures that look like t2 and rewrite them to look like t1"""
-struct Rewrite
-    t1::MetaDiGraph{Int64,Float64}
-    t2::MetaDiGraph{Int64,Float64}
-end
 struct Error
     err::String
 end
@@ -103,7 +71,7 @@ end
 nodecolor = [colorant"lightseagreen", colorant"orange", colorant"lightblue",
              colorant"pink", colorant"grey", colorant"red"]
 nodeshapes = ["diamond","circle","square","star","cross","x"]
-function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
+function viz(g::MetaDiGraph, ids::Bool = false,
              hashs::Bool=false, name::String = "", dryrun::Bool = false)::Nothing
 
     # Helper funcs
@@ -130,23 +98,28 @@ function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
 
     else
 
-    # Create a tree from the DAG using Dijkstra's Algorithm
-    d = dijkstra_shortest_paths(g,root(g),allpaths=true)
-    g′ = copy(g)
-    for e in edges(g′) rem_edge!(g′,e) end
-    for e in edges(g′) rem_edge!(g′,e) end
+    if length(traverse(g,root(g)))==nv(g) # root is a true root
+        # Create a tree from the DAG using Dijkstra's Algorithm
+        d = dijkstra_shortest_paths(g,root(g),allpaths=true)
+        g′ = copy(g)
+        for e in edges(g′) rem_edge!(g′,e) end
+        for e in edges(g′) rem_edge!(g′,e) end
 
-    @assert ne(g′) == 0 "$(collect(edges(g′)))"
-    for (i,j) in enumerate(d.predecessors)
-        if i == root(g) ? nothing : add_edge!(g′,j[1],i) end
+
+        @assert ne(g′) == 0 "$(collect(edges(g′)))"
+        for (i,j) in enumerate(d.predecessors)
+            if i == root(g) ? nothing : add_edge!(g′,j[1],i) end
+        end
+        @assert ne(g′) == nv(g)-1 "$(ne(g′)) != $(nv(g)-1)"
+
+        # Get initial guess for the layout from this tree
+        adj = Array(g′.graph.fadjlist)
+        pos = Buchheim.layout(adj)
+        locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
+        locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=60,INITTEMP=.4)
+    else
+        locs_x, locs_y = spring_layout(g,C=20,MAXITER=100,INITTEMP=2.)
     end
-    @assert ne(g′) == nv(g)-1 "$(ne(g′)) != $(nv(g)-1)"
-
-    # Get initial guess for the layout from this tree
-    adj = Array(g′.graph.fadjlist)
-    pos = Buchheim.layout(adj)
-    locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
-    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=60,INITTEMP=.4)
 
     end
     scale = max(max(locs_x...)-min(locs_x...),max(locs_y...)-min(locs_y...))
@@ -361,27 +334,89 @@ end
 
 
 """
-Important case to consider: suppose both p1 and p2 match x? E.g. a rule which says ∀x,y∈X: x=y or (x+y)=(y+x)
-In this case, we take the lexicographically smaller (by hash) term.
-
+Try to match p2 to x and then sub result into p1
 Return the substitution and whether any change was made
 """
-function rewrite_toplevel(x::MetaDiGraph, p1::MetaDiGraph, p2::MetaDiGraph)::Tuple{MetaDiGraph,Bool}
-    p1match = patmatch(p1, x)
+function rewrite_toplevel(x::MetaDiGraph, p1::MetaDiGraph, p2::MetaDiGraph, force::Bool=false)::Tuple{MetaDiGraph,Bool}
     p2match = patmatch(p2, x)
-    if !(p1match isa Error || p2match isa Error) # both match
-        out = p1 < p2 ? sub(p1, p1match) : sub(p2, p2match)
-    elseif p2match isa Error # neither or just p1 matched
+    if p2match isa Error
+        if force @assert false Error end
         out = x  # p2 did not match, so we cannot rewrite
-    else # p2 matched, p1 didn't
-        out = sub(p1,p1match)  # the standard p2 -> p1 rewrite
+    else
+        out = sub(p1,p2match)  # the standard p2 -> p1 rewrite
     end
-    return (out, out==x)
+    return (out, gethash(out)!=gethash(x))
 end
 
-"""render subsol."""
-function rss(x)::String
-    join(["$k $(simplerender(v))" for (k,v) in x],"\n")
+"""Return the rewrite and whether or not x changed"""
+function rewrite_at_node(x::MetaDiGraph, i::Int, p1::MetaDiGraph,
+                         p2::MetaDiGraph)::Tuple{MetaDiGraph,Bool}
+    subg, ihsh = subgraph(x, i), gethash(x, i)
+    hshx = gethash(x)
+    subres, changed = rewrite_toplevel(subg, p1, p2)
+    if !changed
+        # println("\t\t\tno match!")
+        out= x
+    else # need to stitch the subgraph back into the original
+        # println("\t\t\tChange! $(simplerender(subg))\n\t\t\t->$(simplerender(subres))")
+        new_x, subres_head = merge_in(x, subres)
+        new_i = hashindex(new_x, ihsh)
+        for inn in inneighbors(new_x,new_i)
+            @assert add_edgeprop!(new_x,inn,subres_head,get_prop(x,inn,new_i,:args))
+            @assert rem_edge!(new_x,inn,new_i)
+            # println("\t\t\tadded $inn->$subres_head, removed $inn->$new_i")
+        end
+        if i == root(x)  set_prop!(new_x, :root, subres_head) end
+        out = rehash!(subgraph(new_x))  # discard elements of subg not in subres
+    end
+    return (out, gethash(out)!=gethash(x))
+end
+
+"""Repeatedly apply rewrite rules at top level and on subterms until convergence.
+Naive solution, try to apply every rule at every level (top to bottom). Whenever
+we make a change, restart the process. If we make it through the whole term, then
+there are no rewrites we can make.
+
+Important case to consider: suppose both p1 and p2 match x? E.g. a rule which says ∀x,y∈X: x=y or (x+y)=(y+x)
+In this case, we take the lexicographically smaller (by hash) term. Same for larger cycles.
+"""
+function rewrite(x::MetaDiGraph,rules::Vector{Tuple{MetaDiGraph,MetaDiGraph}})::MetaDiGraph
+    terms = OrderedDict{String,MetaDiGraph}(gethash(x)=>x)
+
+    modified = true
+    # println("Starting rewrite")
+    while modified
+        modified = false
+        for i in vertices(x)  # arbitrary order
+            # println("\t$i")
+            if getkind(x,i) in [SortedTerm, SortNode]  # only two kinds of equalities: sort and term
+                for (p1, p2) in rules
+                    println("\t\trule $(simplerender(p2))->$(simplerender(p1))")
+                    new_x, modified = rewrite_at_node(x, i, p1, p2)
+                    if modified
+                        # println("\n\tChange made! $(simplerender(x))->$(simplerender(new_x))")
+                        newhsh = gethash(new_x)
+                        if haskey(terms, newhsh)
+                            # println("Cycle detected")
+                            start, maxhsh,maxterm = false, "", nothing
+                            for (h,t) in terms
+                                # println(">> $(simplerender(t))")
+                                if h > maxhsh maxhsh, maxterm = h, t end
+                            end
+                            return maxterm
+                        else
+                            terms[newhsh] = new_x
+                            x = new_x
+                        end
+                    end
+                    if modified break end
+                end
+                if modified break end
+            end
+        end
+    end
+    # println("no changes can be made $(simplerender(x))")
+    return x
 end
 
 """
@@ -422,7 +457,7 @@ function patmatch(pat::MetaDiGraph, x::MetaDiGraph, path::Vector{Int}=Int[])
                            filter_vertices(subpat,:kind,WildCard)])
         subsol = patmatch(subpat, subx, vcat(path,[i]))
 
-        ssstr = subsol isa Error ? string(subsol) : rss(subsol)
+        ssstr = subsol isa Error ? string(subsol) : join(["$k $(simplerender(v))" for (k,v) in subsol],"\n")
         # println("$path Subsol $i with \n\tpat $(simplerender(pat))\n\tx=$(simplerender(x))\n$(ssstr)")
         if subsol isa Error return subsol end
         for (k, v) in collect(subsol)
@@ -464,6 +499,7 @@ function patmatch(pat::MetaDiGraph, x::MetaDiGraph, path::Vector{Int}=Int[])
         return subsols
     end
 end
+
 function sub(pat::MetaDiGraph, d::MatchDict)::MetaDiGraph
     pat = copy(pat)
     # println("Trying to sub with ",join(["$k $(simplerender(v))" for (k,v) in d], "\n"))

@@ -59,7 +59,7 @@ We can define composition by providing the output sort, `Sort(:Hom,[Var(:X,Ob),V
 <iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
 ```
 
-The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are `Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])` and `Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])` (the variable names `m` and `n` only matter for printing out the operator declaration, and all that was important for `Y` was that it was the same the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])`:
+The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are `Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])` and `Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])` (the variable names `m` and `n` only matter for printing out the operator declaration, and all that was important for `Y` was that it was the same in the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])`:
 
 ```@raw html
 <iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
@@ -330,6 +330,8 @@ f = (f⋅id(B))   : A→B
 ---------------------------------------   𝐩𝐪 property
 id((Γ.A)) = ⟨𝐩(A),𝐪(A)⟩   : (Γ.A)→(Γ.A)
 ```
+### Normalization rules
+A naive normalization algorithm is implemented to simplify terms, hopefully to a normal form (if the axioms, interpreted as rewrite rules, are confluent and terminating). It tries to apply all rules to all nodes in the tree, restarting when a change is made. If a cycle is detected, then the process stops and returns the lexicographic maximum (to resolve `(X+Y)<->(Y+X)` infinite loops and others). Examples, including `((id(A) ⋅ ((ab ⋅ bc) ⋅ id(C))) ⋅ (id(C) ⋅ (id(C) ⋅ cd))) -> ((ab ⋅ bc) ⋅ cd)`, are in a [test file](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/test/testnorm.jl).
 
 ### Computing with GATs
 
