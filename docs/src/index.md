@@ -1,5 +1,5 @@
 # AlgebraicTypeTheory.jl
-So far, based on [this tutorial](http://www.jonmsterling.com/pdfs/algebraic-type-theory-tutorial.pdf) and [this paper](https://arxiv.org/abs/1902.08848) by Jonathan Sterling.
+So far, encoding material from [this tutorial](http://www.jonmsterling.com/pdfs/algebraic-type-theory-tutorial.pdf) and [this paper](https://arxiv.org/abs/1902.08848) by Jonathan Sterling.
 
 ## Goals
 
@@ -9,15 +9,17 @@ So far, based on [this tutorial](http://www.jonmsterling.com/pdfs/algebraic-type
 
 - [x] To *instantiate* theories using Julia types and functions, so that terms of the theory can be concretely evaluated.
 
-- [ ] To use a theory to rewrite terms of that theory in a normal form.
+- [  ] Test (by exhaustive or random search) that instances of theories satisfy their axioms
 
-- [ ] To represent homomorphisms between theories and to be able to compose these to get new instances from old ones.
+- [  ] To use a theory to rewrite terms of that theory in a normal form.
 
-- [ ] To look at the structure of some theories and automatically infer some natural morphisms (e.g. an injection from a strictly smaller theory).
+- [  ] To represent homomorphisms between theories and to be able to compose these to get new instances from old ones.
 
-- [ ] To organize a collection of theories into a queryable knowledge base.
+- [  ] To look at the structure of some theories and automatically infer some natural morphisms (e.g. an injection from a strictly smaller theory).
 
-- [ ]To use macros to make the writing of equations/theories more convenient. E.g.
+- [  ] To organize a collection of theories into a queryable knowledge base.
+
+- [  ]To use macros to make the writing of equations/theories more convenient. E.g.
 ```
    App(:mul, [
       App(:mul, [
@@ -35,7 +37,7 @@ could be written as `@term (((((id() * X) * Y) * Z) * id()) * X)`
 
 ## Status
 
-Theories: implementations for Boolean algebras, preorders, monoids, categories, an algebraicized Martin-Löf type theory (not complete yet).
+Theories: implementations for [Boolean algebras](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Boolean.jl), [preorders](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Preorder.jl), [monoids](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Monoid.jl), [categories](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cat.jl), an [algebraicized Martin-Löf type theory](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cwf_no_level.jl) (not complete yet).
 
 Current roadblock: in order to apply rewrite rules to an expression, we need to be able to infer its sort and the sorts of its subterms. This is done by simple pattern matching of expressions: an declaring an operation involves declaring a result sort pattern and term patterns for each argument - by matching terms, we can plug in to the sort pattern and get the result (also effectively typechecking all terms). However, the structure of a term is itself modulo the rewrite rules of the theory, so if there are rewrite rules on sorts or rewrite rules that change the structure of the sort of a term, then things that should be valid arguments will fail to pattern match. As of yet the only theory considered that cannot be fully formalized is the Dependent Types / Categories with Families example.
 
@@ -48,31 +50,24 @@ Take the theory of categories and create a term: `Var(:f,Sort(:Hom,[Var(:A,Ob),V
 
 
 ```@raw html
-<style>
-.iframe li {
-  width: 100% !important;
-  height: 525 !important;
-}
-</style>
-
-<iframe id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
+<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
 ```
 
 We can define composition by providing the output sort, `Sort(:Hom,[Var(:X,Ob),Var(:Z,Ob)])`. Here the variables actually are meant to be wildcards, so we can create a new symbol in our graph to mean "something (arg #2) of a certain sort (arg #1)" and let the "something" be matchable with anything.
 
 ```@raw html
-<iframe id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
+<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
 ```
 
 The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are `Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])` and `Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])` (the variable names `m` and `n` only matter for printing out the operator declaration, and all that was important for `Y` was that it was the same the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])`:
 
 ```@raw html
-<iframe id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
+<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
 ```
 ...to a "sorted version":
 
 ```@raw html
-<iframe id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfinferred.html" height="525" width="100%"></iframe>
+<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfinferred.html" height="525" width="100%"></iframe>
 ```
 We can then create pattern out of this and `f` by itself to make a rule: `Rule("⋅ left-identity", f, App(:cmp, [idA,f]))` which can perform the left rewrite identity on any graph term of an identity composed with something.
 
@@ -338,5 +333,11 @@ id((Γ.A)) = ⟨𝐩(A),𝐪(A)⟩   : (Γ.A)→(Γ.A)
 
 ### Computing with GATs
 
-We can define an instance of a theory by mapping (possibly parameterized) types to sorts and functions to the term operations.
+We can define an instance of a theory by mapping (possibly parameterized) types to sorts and functions to the term operations. In a [test file](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/test/testinst.jl) there are examples of implementing Monoids with `(Int,*)`, Boolean algebras with the powerset of `{1,2,3}` and union/intersection/complement, and Categories with 2D matrix multiplication. For instance, the following term can be evaluated in an environment where `f=[1, 2, 3; 4, 5, 6], g=[1;1;1], M=ℤ², N=ℤ³, P=ℤ`
+
+```@raw html
+<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfg.html" height="525" width="100%"></iframe>
+```
+
+to obtain the composite `[6; 15]` which transforms from ℤ² to ℤ. We can reduce the number of computations by reducing the expression using a one of rewrite rules before evaluating.
 

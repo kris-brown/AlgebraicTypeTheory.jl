@@ -1,1 +1,0 @@
-# Algebraic Type Theory docs

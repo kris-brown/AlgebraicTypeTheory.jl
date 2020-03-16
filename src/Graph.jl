@@ -146,7 +146,7 @@ function viz(g::MetaDiGraph{Int64,Float64}, ids::Bool = false,
     adj = Array(g′.graph.fadjlist)
     pos = Buchheim.layout(adj)
     locs_x, locs_y = [Vector{Float16}(collect(z)) for z in zip(pos...)]
-    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=20,INITTEMP=.1)
+    locs_x, locs_y = spring_layout(g, locs_x, locs_y,C=10,MAXITER=60,INITTEMP=.4)
 
     end
     scale = max(max(locs_x...)-min(locs_x...),max(locs_y...)-min(locs_y...))

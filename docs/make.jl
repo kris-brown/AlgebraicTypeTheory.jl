@@ -28,18 +28,18 @@ makedocs(
   doctest     = false,
   pages       = Any[
     "AlgebraicTypeTheory.jl" => "index.md",
-    "Theories" => Any[
-      "generated/theories/monoid.md",
-      "generated/theories/boolean.md",
-      "generated/theories/preorder.md",
-      "generated/theories/cat.md",
-      "generated/theories/cwf.md",
-      "generated/theories/cwf_no_level.md",     ],
+  #   "Theories" => Any[
+  #     "generated/theories/monoid.md",
+  #     "generated/theories/boolean.md",
+  #     "generated/theories/preorder.md",
+  #     "generated/theories/cat.md",
+  #     "generated/theories/cwf.md",
+  #     "generated/theories/cwf_no_level.md",     ],
 
-      "Core" => Any[
-        "generated/core/graph.md",
-        "generated/core/graphterm.md",
-      ],
+  #     "Core" => Any[
+  #       "generated/core/graph.md",
+  #       "generated/core/graphterm.md",
+  #     ],
   ]
 )
 
