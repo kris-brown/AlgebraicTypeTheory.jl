@@ -42,20 +42,19 @@ Theories: implementations for [Boolean algebras](https://github.com/kris-brown/A
 ## Overview
 
 ### Terms, Patterns, Rewrite rules
-Take the theory of categories and create a term: `Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:A,Ob)]))` (using `Ob=Sort(:Ob)`)
+Take the theory of categories and let `Ob=Sort(:Ob); A,B,C,X,Y,Z = [Var(x, Ob) for x in [:A,:B,:C,:X,:Y,:Z]]` so that we can create a term: `Var(:f, Sort(:Hom,[A,B]))`
 
 
 ```@raw html
-<iframe style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
+<iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
 ```
 
-We can define composition by providing the output sort, `Sort(:Hom,[Var(:X,Ob),Var(:Z,Ob)])`. Here the variables actually are meant to be wildcards, so we can create a new symbol in our graph to mean "something (arg #2) of a certain sort (arg #1)" and let the "something" be matchable with anything.
+We can define composition by providing the output sort and then the sorts of arguments: `OpDecl(:cmp, Sort(:Hom,[X,Z]), [Sort(:Hom,[X,Y])]),Sort(:Hom,[Y,Z])])` Here the variables actually signify wildcards, so these terms gets automatically turned into patterns with named wildcards and a new dark cross symbol which means "I have a term (arg #2) of a certain sort (arg #1)". This is what the output sort looks like:
 
 ```@raw html
-<iframe style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
+<iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
 ```
-
-The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are `Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])` and `Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])` (the variable names `m` and `n` only matter for printing out the operator declaration, and all that was important for `Y` was that it was the same in the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])`:
+Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[A]), Var(:f,Sort(:Hom,[A,B]))])`:
 
 ```@raw html
 <iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
@@ -69,7 +68,7 @@ We can then create pattern out of this and `f` by itself to make a rule: `Rule("
 
 ### Example theory
 
-Sort declarations, term operation declarations, and axioms all can be rendered in plain text, and sorts/terms/patterns may as viewed as term graphs. For example, this fragment of categories with families + dependent types.
+Sort declarations, term operation declarations, and axioms all can be rendered in plain text, and sorts/terms/patterns may as viewed as term graphs. For example, this fragment of categories with families + dependent types. Note that the sorts of terms shown in equality axioms are *computed*, rather than specified.
 
 ```
 
