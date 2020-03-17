@@ -6,11 +6,12 @@ obdecl = SortDecl(:ob, "Underlying set of preorder")
 A,B,C = [Var(x,Sort(:ob)) for x in [:A,:B,:C]]
 leqdecl = SortDecl(:leq,"({}≤{})",[A,B],"A relation from A -> B")
 aa,ab,bc,ac = [Sort(:leq,[x,y]) for (x,y) in [A=>A,A=>B,B=>C,A=>C]]
-p,q = [Var(x,y) for (x,y) in [:p=>ab,:q=>bc]]
+p,q,r = [Var(x,y) for (x,y) in [:p=>ab,:q=>bc,:r=>ab]]
 refl = OpDecl(:refl,"{}ᵣ",aa,[A],"Reflexivity")
 trans = OpDecl(:trans,"({}⪯{})",ac,[p,q],"Transitivity")
-preorder=Theory([obdecl,leqdecl],[refl,trans],Rule[],"Preorder")
-# print(render(preorder))
+singl = Rule("Singleton","The sort A->B is a singleton set.",p,r,)
+preorder=Theory([obdecl,leqdecl],[refl,trans],[singl],"Preorder")
+print(render(preorder))
 end
 
 """
@@ -58,6 +59,17 @@ Transitivity
 Aᵣ : (A≤A)
 
 Reflexivity
+
+###################
+# Equality Axioms #
+###################
+
+==================================================
+p,r:(A≤B)  A,B:ob
+-----------------   Singleton
+ p = r   : (A≤B)
+
+The sort A->B is a singleton set.
 
 
 """

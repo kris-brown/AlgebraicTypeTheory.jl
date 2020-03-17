@@ -24,10 +24,13 @@ using NetworkLayout:Buchheim
 using LinearAlgebra: normalize, norm
 using Formatting: format
 using DataStructures: OrderedDict
+
+"""
+Tools for operating on a specific class of LightGraphs - namely acyclic term graphs
+"""
 ############################################################################
 # TYPES #
 #########
-"""Take structures that look like t2 and rewrite them to look like t1"""
 struct Error
     err::String
 end
@@ -35,6 +38,7 @@ end
 MatchDict = Dict{Symbol,MetaDiGraph}
 MatchDict′ = Union{Error,MatchDict}
 @enum NodeType VarNode = 1 AppNode = 2 SortNode = 3 WildCard = 4 SortedTerm = 5 Unknown = 6
+############################################################################
 
 function simplerender(g::MetaDiGraph, n::Int = 0)::String
     n = n == 0 ? root(g) : n

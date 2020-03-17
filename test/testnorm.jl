@@ -6,8 +6,6 @@ using AlgebraicTypeTheory.Theories.Cat:cat
 using MetaGraphs
 """
 Tests for the normalization of terms by repeatedly applying rewrite rules
-    from a theory. This is not currently operational since switching to graph
-    terms.
 """
 # ##########################################################################################
 # Normalization in Monoid

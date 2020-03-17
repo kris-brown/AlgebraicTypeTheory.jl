@@ -46,24 +46,24 @@ Take the theory of categories and create a term: `Var(:f,Sort(:Hom,[Var(:A,Ob),V
 
 
 ```@raw html
-<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
+<iframe style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/f.html" height="525" width="100%"></iframe>
 ```
 
 We can define composition by providing the output sort, `Sort(:Hom,[Var(:X,Ob),Var(:Z,Ob)])`. Here the variables actually are meant to be wildcards, so we can create a new symbol in our graph to mean "something (arg #2) of a certain sort (arg #1)" and let the "something" be matchable with anything.
 
 ```@raw html
-<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
+<iframe style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/homxzpat.html" height="525" width="100%"></iframe>
 ```
 
 The variable names were significant (note each wildcard has a name) since these names can be bound in the arguments of the declaration of composition, which are `Var(:m,Sort(:Hom,[Var(:X,Ob),Var(:Y,Ob)])])` and `Var(:n,Sort(:Hom,[Var(:Y,Ob),Var(:Z,Ob)])])` (the variable names `m` and `n` only matter for printing out the operator declaration, and all that was important for `Y` was that it was the same in the two arguments). Now we can compute the sort of arbitrary expressions that match this pattern. So using a theory we can "upgrade" a term like `App(:cmp,[App(:id,[Var(:A,Ob)]), Var(:f,Sort(:Hom,[Var(:A,Ob),Var(:B,Ob)]))])`:
 
 ```@raw html
-<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
+<iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idf.html" height="525" width="100%"></iframe>
 ```
 ...to a "sorted version":
 
 ```@raw html
-<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfinferred.html" height="525" width="100%"></iframe>
+<iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfinferred.html" height="525" width="100%"></iframe>
 ```
 We can then create pattern out of this and `f` by itself to make a rule: `Rule("⋅ left-identity", f, App(:cmp, [idA,f]))` which can perform the left rewrite identity on any graph term of an identity composed with something.
 
@@ -255,8 +255,8 @@ A naive normalization algorithm is implemented to simplify terms, hopefully to a
 We can define an instance of a theory by mapping (possibly parameterized) types to sorts and functions to the term operations. In a [test file](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/test/testinst.jl) there are examples of implementing Monoids with `(Int,*)`, Boolean algebras with the powerset of `{1,2,3}` and union/intersection/complement, and Categories with 2D matrix multiplication. For instance, the following term can be evaluated in an environment where `f=[1, 2, 3; 4, 5, 6], g=[1;1;1], M=ℤ², N=ℤ³, P=ℤ`
 
 ```@raw html
-<iframe style="height: 525px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfg.html" height="525" width="100%"></iframe>
+<iframe scrolling="no" style="height: 625px;" id="igraph" style="border:none;" seamless="seamless" src="https://web.stanford.edu/~ksb/docs/idfg.html" height="525" width="100%"></iframe>
 ```
 
-to obtain the composite `[6; 15]` which transforms from ℤ² to ℤ. We can reduce the number of computations by reducing the expression using a one of rewrite rules before evaluating.
+to obtain the composite `[6; 15]` which transforms from ℤ² to ℤ. We can reduce the number of computations by reducing the expression using `Cat`'s rewrite rules before evaluating.
 

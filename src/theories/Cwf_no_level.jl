@@ -139,9 +139,9 @@ NN = Var(:N,Sort(:el,[Γ,AyΓ]))
 # TO MOVE ON, WE NEED TO INCORPORATE SUBSTITUTIONS (DEFINED UP TO THIS PT IN TIME)
 # IN THE TYPE INFERENCE PROCESS.
 # Because A[id] == A we should be able to do stuff with A[id] in the place of A, like El(Γ,A[id])
-# Currently using a hack.
+# How do we do this while only rewriting terms to make them simpler?
 
-snocNN=App(:snoc,[idΓ,NN])
+snocNN=App(:snoc,[idΓ,NN])  # This cannot be inferred
 
 apps2 = App(:Tyact, [B, snocNN])
 appsort = Sort(:el,[Γ, apps2])
