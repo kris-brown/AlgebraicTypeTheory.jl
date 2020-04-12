@@ -1,9 +1,9 @@
 module GraphTerm
-export rewrite,
+export
     Term, Theory, SortDecl, OpDecl, Rule, validate,join_term,
-    Sort, App,Var, mkPat, unPat,
+    Sort, App,Var,
     viz, simplerender, render, root, getkind, patmatch, sub,
-    infer, infer!, uninfer, getsym, gethash,
+    infer, uninfer, naiveInfer, getsym, gethash,
     vars, getSig, extend, upgrade,normalize
 
 using MetaGraphs: MetaDiGraph, get_prop, has_prop, set_prop!, set_props!, set_indexing_prop!, props, filter_vertices
@@ -19,7 +19,7 @@ if isdefined(@__MODULE__, :LanguageServer)
     using .Graph
 else
     using AlgebraicTypeTheory.Graph
-    import AlgebraicTypeTheory.Graph: root, arity, viz, getkind, patmatch, sub, simplerender, uninfer, getsym, gethash
+    import AlgebraicTypeTheory.Graph: root, arity, viz, getkind, patmatch, sub, simplerender, uninfer, getsym, gethash, getarg
 end
 ############################################################################
 
@@ -49,7 +49,7 @@ to typecheck when the sort is applied."""
         desc,
     )
 end
-SortDecl(s::Symbol, d::String) = SortDecl(s, 0, Term[], d)
+SortDecl(s::Symbol, d::String="") = SortDecl(s, 0, Term[], d)
 
 
 """Sort field variables are related to args: pattern matching on the args here
@@ -70,8 +70,8 @@ should inform how to compute what the sort is of an application of Op."""
     )
 
 end
-OpDecl(s::Symbol, o::Term, d::String) = OpDecl(s, 0, o, Term[], d)
-OpDecl(s::Symbol, p::String, o::Term, d::String = "") = OpDecl(s, p, o, Term[], d)
+OpDecl(s::Symbol, p::Union{Int,String}, o::Term, d::String = "") = OpDecl(s, p, o, Term[], d)
+OpDecl(s::Symbol, o::Term, d::String= "") = OpDecl(s, 0, o, Term[], d)
 
 @auto_hash_equals struct Rule
     name::String
@@ -95,12 +95,11 @@ end
         upgraded ? new(sorts, ops, rules, name, upgraded) :
         upgrade(new(sorts, ops, rules, name, upgraded))
 end
-Theory(s::Union{Nothing,Vector{SortDecl}}, o::Union{Nothing,Vector{OpDecl}}, r::Union{Nothing,Vector{Rule}}, n::String)  = Theory(
+Theory(s::Union{Nothing,Vector{SortDecl}}, o::Union{Nothing,Vector{OpDecl}}, r::Union{Nothing,Vector{Rule}}, n::String, upgrade::Bool=false)  = Theory(
     Dict{Symbol,SortDecl}(s === nothing ? [] : [(x.sym, x) for x in s]),
     Dict{Symbol,OpDecl}(o === nothing ? [] : [(x.sym, x) for x in o]),
     Vector{Rule}(r === nothing ? [] : r),
-    n,
-    false,
+    n, upgrade,
 )
 
 """Longest chain length"""
@@ -148,6 +147,9 @@ function getsym(t::Term)::Symbol getsym(t.g, root(t)) end
 function arity(t::Term)::Int arity(t.g, root(t)) end
 function patmatch(p::Term, x::Term) patmatch(p.g, x.g) end
 function sub(p::Term, m::MatchDict)::Term Term(sub(p.g, m)) end
+function getarg(t::Term, i::Int)::Term
+    Term(subgraph(t.g, getarg(t.g,root(t), i)))
+end
 ############################################################################
 """Normally, for t2->t1, we need FreeVar(t1)⊆FreeVar(t2), however there is an edge case which breaks this
 Consider ∀x,y∈X: x=y, asserting that X is singleton. The freevars do not intersect, but we can still
@@ -173,7 +175,7 @@ function validate(t::Theory, x::SortDecl)::Nothing
     return nothing
 end
 function validate(t::Theory, x::OpDecl)::Nothing
-    [@assert getkind(a) == SortedTerm for a in x.args]
+    [@assert getkind(a) in [SortedApp, VarNode] for a in x.args]
     [validate(t, a) for a in x.args]
     validate(t, x.sort)
     @assert length(x.args) == sym_arity(x)
@@ -184,10 +186,8 @@ function vars(t::Term)::Dict{Symbol,Term}
     vars = collect(filter_vertices(t.g, :kind, VarNode))
     if isempty(vars)
         wcs = collect(filter_vertices(t.g, :kind, WildCard))
-        Dict([
-            (getsym(t.g, v), Term(subgraph(t.g, getarg(t.g, inneighbors(t.g, v)[1], 1))))
-            for v in wcs
-        ])
+        Dict([(getsym(t.g, v), Term(subgraph(t.g, getarg(t.g, inneighbors(t.g, v)[1], 1))))
+              for v in wcs ])
     else
         return Dict([
             (getsym(t.g, v), Term(subgraph(t.g, neighbors(t.g, v)[1]))) for v in vars
@@ -196,7 +196,7 @@ function vars(t::Term)::Dict{Symbol,Term}
 end
 
 function validate(t::Theory, x::Term)::Term
-    g = x.g  # we already validated non-theory aspects when constructing the Term
+    g = x.g  # already validated non-theory aspects in construction
     vars = collect(filter_vertices(g, :kind, VarNode))
     err = "Same variable appears with different hashes"
     @assert length(vars) == length(Set([getsym(g, v) for v in vars])) err
@@ -204,6 +204,7 @@ function validate(t::Theory, x::Term)::Term
     return x
 end
 
+"""Confirm nodes have the right number of arguments."""
 function validate(t::Theory, g::MetaDiGraph, n::Int = 0)::Nothing
     n = n == 0 ? root(g) : n
     kind = getkind(g, n)
@@ -218,6 +219,10 @@ function validate(t::Theory, g::MetaDiGraph, n::Int = 0)::Nothing
         @assert haskey(t.ops, sym)
         decl = t.ops[sym]
         @assert ar == sym_arity(decl)
+    elseif kind == SortedApp
+        @assert haskey(t.ops, sym)
+        decl = t.ops[sym]
+        @assert ar == sym_arity(decl)+1
     elseif kind == VarNode
         @assert ar == 1
     end
@@ -246,7 +251,7 @@ function validate(g::MetaDiGraph)::MetaDiGraph
     # Initialize variables
     groot = root(g)
     var_seen = Set{Symbol}() # keep track of VarNode symbols
-    is_inferred = !isempty(filter_vertices(g, :kind, SortedTerm))
+    is_inferred = !isempty(filter_vertices(g, :kind, SortedApp))
     # Misc overall checks
     @assert length(traverse(g, groot)) == nv(g) "Root node must see everything"
     @assert nv(g) > 0 "Term must not be empty"
@@ -266,10 +271,14 @@ function validate(g::MetaDiGraph)::MetaDiGraph
         kind = getkind(g, i)
         sym = getsym(g, i)
 
-        if is_inferred && kind in [VarNode, AppNode]
-            @assert length(inn) == 1 "If inferred, all Vars/Apps should be the lone child (of a SortedTerm) $inn"
-            innkind = getkind(g, inn[1])
-            @assert innkind == SortedTerm "If inferred, all Vars/Apps should the lone child of a SortedTerm: $innkind"
+        if is_inferred
+            @assert kind != AppNode
+            if kind in [SortedApp, SortNode]
+            for ind in 1:arity(g,i)
+                valid = (kind == SortedApp && ind == 1) ? [SortNode] : [VarNode, SortedApp]
+                @assert getkind(g, getarg(g,i,ind)) in valid
+            end
+            end
         end
 
         if kind == VarNode
@@ -277,27 +286,14 @@ function validate(g::MetaDiGraph)::MetaDiGraph
             @assert getkind(g, ns[1]) == SortNode "VarNode must be connected to a SortNode"
             @assert !(sym in var_seen) "Same symbol $sym with different types"
             push!(var_seen, sym)
-        elseif kind == SortedTerm
-            sta1, sta2 = [getarg(g, i, z) for z in 1:2]
-            @assert length(ns) == 2 "SortedTerm has two children, not $(length(ns))"
-            @assert getkind(g, sta1) == SortNode "First arg of SortedTerm is a sort $(getkind(g, sta1))"
-            if !(getkind(g, sta2) in [AppNode, VarNode, WildCard])
-                #println("Error with $(simplerender(g))")
-                viz(g, true, false, "sortedtermerror")
-            end
-            @assert getkind(g, sta2) in [AppNode, VarNode, WildCard] "Second arg of SortedTerm is Var/App/WildCard: $(getkind(g, sta2))"
-
         elseif kind == WildCard
             @assert length(ns) == 0 "Wildcard has no children"
-        elseif kind in [SortNode, AppNode]
+        elseif kind in [SortNode, AppNode, SortedApp]
             if !isempty(ns)
                 edgeargs = [get_prop(g, i, n, :args) for n in ns]
                 ari = arity(g, i)
                 args = sort(vcat(edgeargs...))
                 @assert collect(1:ari) == args "Bad arg labeling: $edgeargs"
-                if is_inferred
-                    @assert all([getkind(g, n) == SortedTerm for n in ns])
-                end
             end
         else
             @assert false "Illegal node kind $kind"
@@ -342,7 +338,7 @@ function Var(sym::Symbol, sort::Term)::Term
     @assert getkind(sort) == SortNode
     join_term(sym, VarNode, [sort])
 end
-
+#=
 """Interpret a term as a pattern for matching. All variables Var(Varsym)->Sort
 are replaced with Wildcard(Varsym) and outgoing edge removed"""
 function mkPat(t::Term)::Term Term(mkPat(t.g)) end
@@ -369,19 +365,13 @@ function unPat(t::Term)::Term
     Term(unPat(t.g))
 end
 
-"""Take an INFERRED pattern and make an UNINFERRED term (wildcards replaced w/ variables)"""
+"""Wildcards replaced w/ variables"""
 function unPat(g::MetaDiGraph)::MetaDiGraph
     vars = collect(filter_vertices(g, :kind, WildCard))
-    for v in vars
-        inn = inneighbors(g, v)
-        @assert length(inn) == 1 && getkind(g, inn[1]) == SortedTerm
-        sortnode = getarg(g, inn[1], 1)
-        add_edgeprop!(g, v, sortnode, [1])
-        set_prop!(g, v, :kind, VarNode)
-    end
+    for v in vars set_prop!(g, v, :kind, VarNode) end
     return uninfer(g)
 end
-
+=#
 ############################################################################
 function get_deps(x::SortDecl)::Set{Symbol}
     isempty(x.args) ? Set{Symbol}() : union([get_deps(a) for a in x.args]...)
@@ -440,44 +430,39 @@ function upgrade(t::Theory, s::SortDecl)::SortDecl
         push!(newargs, infer(t, a))
     end
 
-    return SortDecl(s.sym, s.pat, [mkPat(a) for a in newargs], s.desc)
+    return SortDecl(s.sym, s.pat, newargs, s.desc)
 end
 function upgrade(t::Theory, o::OpDecl)::OpDecl
     # println("upgrading $o\n************")
-    newsort = mkPat(infer(t, o.sort))
+    newsort = infer(t, o.sort)
     newargs = Term[]
     for (i, a) in enumerate(o.args)
         # println("upgrading op $(o.sym) arg $i")
         push!(newargs, infer(t, a))
     end
-    return OpDecl(o.sym, o.pat, newsort, [mkPat(a) for a in newargs], o.desc)
+    return OpDecl(o.sym, o.pat, newsort, newargs, o.desc)
 end
 
 """Assumes that the theory has already been bootstrapped/upgrade"""
 function upgrade(t::Theory, r::Rule)::Rule
     # println("upgrading $r\n************")
-    t1 = mkPat(infer(t, r.t1))
-    t2 = mkPat(infer(t, r.t2))
+    t1 = infer(t, r.t1)
+    t2 = infer(t, r.t2)
     Rule(r.name, r.desc, t1, t2)
 end
 
 ############################################################################
-function normalize(t::Theory,x::Term)::Term
-    res = rewrite(x.g, Tuple{MetaDiGraph,MetaDiGraph}[(mkPat(r.t1).g,mkPat(r.t2).g) for r in t.rules])
-    return Term(res)
-end
-############################################################################
 
-"""Infer the sort of an appnode. Modify it to become a SortedNode
-We may need to use rewrite rules even at this step?
+"""Infer the sort of an appnode. Modify it to become a SortedApp
 """
+#=
 function infer(th::Theory, t::Term)::Term
-    sts = isempty(collect(filter_vertices(t.g, :kind, SortedTerm)))
+    sts = isempty(collect(filter_vertices(t.g, :kind, SortedApp)))
     if !sts
         viz(t, false, true,"alreadyinferred")
         @assert false "Cannot infer something already inferred: $(simplerender(t)) $sts"
     end
-    res = infer!(th, copy(t.g))
+    res = infer(th, copy(t.g))
     try
         return Term(res)
     catch m
@@ -487,7 +472,7 @@ function infer(th::Theory, t::Term)::Term
     end
 end
 
-function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
+function infer(th::Theory, g::MetaDiGraph)::MetaDiGraph
     # println("STARTING INFER W/ $(simplerender(g))")
     seen = Set{String}()
     preferred = sort(collect(vertices(g)))  # when reindexing, default to these values
@@ -589,6 +574,67 @@ function infer!(th::Theory, g::MetaDiGraph)::MetaDiGraph
         n = next()
     end
     return g # nothing left to infer
+end =#
+function infer(th::Theory, t::Term)::Term
+    Term(infer(th, t.g))
+end
+function infer(th::Theory, g::MetaDiGraph)::MetaDiGraph
+    g = copy(g)
+    res = naiveInfer(th, g)
+
+    for (k, v) in res
+        app = hashindex(g, k)
+        g, head = merge_in(g, v)
+        for nei in neighbors(g, app)
+            set_prop!(g, app, nei, :args, [i+1 for i in get_prop(g, app, nei, :args)])
+        end
+        add_edgeprop!(g, app, head, [1])
+
+        set_prop!(g,app,:kind, SortedApp)
+    end
+
+    return rehash!(g)
+end
+
+function naiveInfer(th::Theory, g::MetaDiGraph, n::Int = 0,
+                    res::Dict{String,MetaDiGraph} = Dict{String,MetaDiGraph}()
+                   )::Dict{String, MetaDiGraph}
+    n = n == 0 ? root(g) : n
+
+    sym, kind = [get_prop(g, n, x) for x in [:sym, :kind]]
+
+    @assert kind != SortedApp "Dont use infer on something already inferred"
+
+    # Recursively solve for descendents
+    neighbors =  [getarg(g, n, i) for i in 1:arity(g,n)]
+
+    for neigh in neighbors
+        if !haskey(res, gethash(g, neigh))
+            merge!(res,naiveInfer(th, g, neigh, res))
+        end
+    end
+
+    # Add current node if we are App
+    if kind == AppNode && !haskey(res, gethash(g, n))
+        op_pat = th.ops[sym].sort.g
+        args = th.ops[sym].args
+        getsort = z -> getkind(g,z) == AppNode ? # either app or var
+            res[gethash(g, z)] : subgraph(g, getarg(g, z, 1))
+        argsorts = [getsort(nei) for nei in neighbors]
+        matches = MatchDict()
+        for (pat,neigh) in zip(args,neighbors)
+            mat = patmatch(pat.g, subgraph(g, neigh), res)
+            if mat isa Error @assert false mat.err end
+            mergeIn!(matches, mat)
+        end
+        res[gethash(g, n)] = sub(op_pat, matches)
+    end
+    if sym == :cmp
+        #println("new res with op pat $(simplerender(op_pat))\n and matches \n\t$(join([(k,simplerender(v)) for (k,v) in matches],"\n\t"))\n and result \n\t$(simplerender((res[gethash(g,n)]))")
+        #viz(op_pat)
+        #viz(res[gethash(g,n)],false,true)
+    end
+    return res
 end
 
 ##############################################################################
@@ -598,14 +644,14 @@ function uninfer(x::Term)::Term
 end
 
 function uninfer(s::SortDecl)::SortDecl
-    SortDecl(s.sym, s.pat, [unPat(a) for a in s.args], s.desc)
+    SortDecl(s.sym, s.pat, [uninfer(a) for a in s.args], s.desc)
 end
 function uninfer(s::OpDecl)::OpDecl
-    OpDecl(s.sym, s.pat, unPat(s.sort), [unPat(a) for a in s.args], s.desc)
+    OpDecl(s.sym, s.pat, uninfer(s.sort), [uninfer(a) for a in s.args], s.desc)
 
 end
 function uninfer(s::Rule)::Rule
-    Rule(s.name, s.desc, unPat(s.t1), unPat(s.t2))
+    Rule(s.name, s.desc, uninfer(s.t1), uninfer(s.t2))
 end
 ##############################################################################
 
@@ -624,12 +670,12 @@ function extend(
     o::Vector{Q} = OpDecl[],
     r::Vector{R} = Rule[],
     n::String = "",
+    nocheck::Bool = false
 )::Theory where {T<:Union{Any,SortDecl},Q<:Union{Any,OpDecl},R<:Union{Any,Rule}}
     ss = unique(vcat([uninfer(sd) for sd in values(t1.sorts)], Vector{SortDecl}(s)))
     os = unique(vcat([uninfer(od) for od in values(t1.ops)], Vector{OpDecl}(o)))
     rs = unique(vcat([uninfer(rd) for rd in values(t1.rules)], Vector{Rule}(r)))
-    #  has $(length(ss)) sorts $(length(os)) ops $(length(rs)) rules ")
-    return Theory(ss, os, rs, isempty(n) ? t1.name : n)
+    return Theory(ss, os, rs, isempty(n) ? t1.name : n, nocheck)
 end
 
 ####################################
@@ -639,9 +685,11 @@ end
 function Base.show(io::IO, x::OpDecl)
     printfmt(io, "OPDECL {}", x.pat)
 end
+
 function Base.show(io::IO, x::SortDecl)
     printfmt(io, "SORTDECL {}", x.pat)
 end
+
 function Base.show(io::IO, x::Rule)
     printfmt(io, string("EQ ", x.name, "\n\t{} = {}"), x.t1, x.t2)
 end
@@ -707,6 +755,7 @@ function render(t::Theory, x::SortDecl, prnt::Bool=false)::String
     if prnt println(out) end
     return out
 end
+
 function render(t::Theory, x::Premises, prnt::Bool=false)::String
     sorts = sort(unique(collect(values(x.premises))))
     dic = Dict(
@@ -717,6 +766,7 @@ function render(t::Theory, x::Premises, prnt::Bool=false)::String
     if prnt println(out) end
     return out
 end
+
 function render(t::Theory, x::OpDecl, prnt::Bool=false)::String
     top = render(t, getSig(x))
     sor = render(t, x.sort)
@@ -725,31 +775,34 @@ function render(t::Theory, x::OpDecl, prnt::Bool=false)::String
     if prnt println(out) end
     return out
 end
+
 function render(t::Theory, x::Term, prnt::Bool=false)::String
     out = render(t, x.g)
     if prnt println(out) end
     return out
 end
+
 function render(t::Theory, g::MetaDiGraph, n::Int = 0, prnt::Bool=false)::String
     n = n == 0 ? root(g) : n
     kind = getkind(g, n)
     sym = getsym(g, n)
 
-    if kind in [SortNode, AppNode]
-        isapp = kind == AppNode
+    if kind in [SortNode, AppNode, SortedApp]
+        isapp = kind in [SortedApp, AppNode]
+        issapp = kind == SortedApp
         decl = (isapp ? t.ops : t.sorts)[sym]
         pat = decl.pat
-        arty = length(decl.args)
-        if arty == 0
-            out = string(sym, isapp ? "()" : "")
+
+        if isempty(decl.args)
+            out = string(pat, isapp ? "()" : "")
         else
-            args = [render(t, g, getarg(g, n, i)) for i in 1:arty]
+            arty = length(decl.args)
+            args = [render(t, g, getarg(g, n, i + (issapp ? 1 : 0)))
+                    for i in 1:arty]
             out = format(pat, args...)
         end
     elseif  kind in [VarNode, WildCard]
         out = string(sym)
-    elseif kind == SortedTerm
-        out = render(t, g, getarg(g, n, 2))
     else
         throw(DomainError)
     end
@@ -760,7 +813,12 @@ end
 function render(t::Theory, r::Rule, prnt::Bool=false)::String
     rsort = subgraph(r.t1.g, getarg(r.t1.g, root(r.t1.g), 1))
     top = render(t, getSig(r))
-    sortstr = getkind(r.t1) == SortNode ? "sort" : string(": ",render(t, rsort))
+    is_inferred = !isempty(filter_vertices(r.t1.g, :kind, SortedApp))
+    if is_inferred
+        sortstr = getkind(r.t1) == SortNode ? "sort" : string(": ",render(t, rsort))
+    else
+        sortstr = ""
+    end
     bot = format("{} = {}   {}", render(t, r.t1), render(t, r.t2), sortstr)
     out = printRule(top, bot, r.name, r.desc)
     if prnt println(out) end
@@ -781,3 +839,8 @@ function getSig(x::Rule)::Premises
 end
 
 end
+############################################################################
+# function normalize(t::Theory,x::Term)::Term
+#     res = rewrite(x.g, Tuple{MetaDiGraph,MetaDiGraph}[(mkPat(r.t1).g,mkPat(r.t2).g) for r in t.rules])
+#     return Term(res)
+# end

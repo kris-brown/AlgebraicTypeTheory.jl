@@ -1,6 +1,6 @@
 module Graph
 
-export Rewrite,
+export
     simplerender, viz,
     MatchDict,Error,patmatch, sub,
     merge_in,subgraph,
@@ -9,9 +9,9 @@ export Rewrite,
     rehash!, rm_dups, addhash,hashindex,compute_hash,
     gethash, getsym, getkind,
     symmetrize,
-    NodeType, VarNode, AppNode, SortNode, WildCard, SortedTerm,
+    NodeType, VarNode, AppNode, SortNode, WildCard, SortedApp,
     add_vertprop!, add_edgeprop!,
-    rewrite_at_node,rewrite,rewrite_toplevel
+    mergeIn!
 
 using LightGraphs: star_digraph, path_digraph, nv,ne, adjacency_matrix, vertices, edges, add_vertex!, add_edge!,rem_edge!, neighbors, AbstractGraph, rem_edge!, has_edge, inneighbors,dijkstra_shortest_paths
 using MetaGraphs: MetaDiGraph, set_prop!, set_props!, props, filter_vertices, set_indexing_prop!, get_prop, has_prop
@@ -37,7 +37,7 @@ end
 
 MatchDict = Dict{Symbol,MetaDiGraph}
 MatchDict′ = Union{Error,MatchDict}
-@enum NodeType VarNode = 1 AppNode = 2 SortNode = 3 WildCard = 4 SortedTerm = 5 Unknown = 6
+@enum NodeType VarNode = 1 AppNode = 2 SortNode = 3 WildCard = 4 SortedApp = 5 Unknown = 6
 ############################################################################
 
 function simplerender(g::MetaDiGraph, n::Int = 0)::String
@@ -45,36 +45,26 @@ function simplerender(g::MetaDiGraph, n::Int = 0)::String
     kind = getkind(g, n)
     sym = string(get_prop(g, n, :sym))
 
-    if kind in [AppNode, SortNode, Unknown, WildCard]
+    if kind in [AppNode, SortNode, Unknown, WildCard, SortedApp]
         arty = arity(g, n)
         if arty == 0 return sym end
         pat = string("{}(", join(repeat(["{}"], arty), ", "), ")")
         args = [simplerender(g, getarg(g, n, i)) for i in 1:arty]
+        if kind == SortedApp
+            args = length(args) > 1 ? vcat(args[2:end], [args[1]]) : args
+            pat = replace(pat, ", {})" => ")::{}")
+        end
         return format(pat, sym, args...)
     elseif kind == VarNode
         return format("{}:{}", sym, simplerender(g, neighbors(g, n)[1]))
-    elseif kind == SortedTerm
-        nextkind = getkind(g, getarg(g, n, 2))
-        if nextkind == VarNode
-            return simplerender(g, getarg(g, n, 2))
-        elseif nextkind == WildCard
-            return string(getsym(g, getarg(g, n, 2)))
-        else
-            if nextkind != AppNode nextkind
-                println("Warning, SortedNode $n points to $nextkind")
-            end
-            return format("{}::{}",
-                simplerender(g, getarg(g, n, 2)),
-                simplerender(g, getarg(g, n, 1)))
-        end
     else
         throw(DomainError)
     end
 end
 
 nodecolor = [colorant"lightseagreen", colorant"orange", colorant"lightblue",
-             colorant"pink", colorant"grey", colorant"red"]
-nodeshapes = ["diamond","circle","square","star","cross","x"]
+             colorant"grey", colorant"pink", colorant"red"]
+nodeshapes = ["diamond","circle","square","cross","star","x"]
 function viz(g::MetaDiGraph, ids::Bool = false,
              hashs::Bool=false, name::String = "", dryrun::Bool = false)::Nothing
 
@@ -204,7 +194,8 @@ This may result in a graph which has either one or two roots
 """
 function merge_in(g::MetaDiGraph, h::MetaDiGraph)::Tuple{MetaDiGraph,Int}
     g = copy(g)
-    first(g.indices)
+    n_orig = nv(g)
+    first(g.indices)  # throws error if graph lacks :hash as an indexing prop
     hhash = gethash(h, root(h))
     reindex = Dict{Int,Int}() # map indices in h to the new joint graph
 
@@ -227,12 +218,8 @@ function merge_in(g::MetaDiGraph, h::MetaDiGraph)::Tuple{MetaDiGraph,Int}
     for e in edges(h)
         add_edgeprop!(g, reindex[e.src], reindex[e.dst], get_prop(h, e, :args))
     end
-
-    h_root = collect(filter_vertices(g, :hash, hhash))[1]
-    # None of the hash values from either Graph should have to change...
-    # rehash_rec!(g, root(g))
-    # rehash_rec!(g, root(h)) # now all nodes have been updated
-    return (g, h_root)
+    @assert nv(g) >= n_orig "Should only gain nodes, not lose any"
+    return (g, hashindex(g, hhash))
 end
 function len(g::MetaDiGraph, node::Int = 0)::Int
     node = node == 0 ? root(g) : node  # default to root
@@ -329,14 +316,230 @@ end
 function getarg(g::MetaDiGraph, src::Int, n::Int)::Int
     @assert n > 0 "Illegal argument index $n"
     ns = neighbors(g, src)
+    args = Vector{Int}[]
     for neigh in ns
-        if n in getargs(g, src, neigh) return neigh end
+        if n in getargs(g, src, neigh) return neigh
+        else push!(args, getargs(g, src, neigh)) end
+    end
+    viz(g, true)
+    throw(DomainError("Cannot access arg $n from node $src $(getsym(g,src))\n$args")) # bad arg to high or bad labels)
+end
+
+"""Merge dictionaries but check for consistency of definitions"""
+function mergeIn!(x::Dict{Symbol,MetaDiGraph},y::Dict{Symbol,MetaDiGraph}
+                  )::Nothing
+    for (k,v) in y
+        if haskey(x,k)
+            @assert gethash(v)==gethash(x[k])
+        else
+            x[k] = v
         end
-    throw(DomainError("Cannot access arg $n from node $src")) # bad arg to high or bad labels)
+    end
+    return nothing
+end
+
+""" Naive structural pattern matching"""
+function patmatch(pat::MetaDiGraph, x::MetaDiGraph, sortctx::Dict{String, MetaDiGraph})
+    gkeys = [:kind, :sym]
+    proot, xroot = [root(g) for g in [pat, x]]
+    patkindsym = [get_prop(pat, proot, k) for k in gkeys]
+    xkindsym = [get_prop(x, xroot, k) for k in gkeys]
+    if patkindsym[1] == VarNode
+        patsort = subgraph(pat, getarg(pat, proot, 1))
+        xsort = xkindsym[1]==VarNode ? subgraph(x, getarg(x, xroot, 1)) : sortctx[gethash(x)]
+        return merge(Dict(patkindsym[2] => x), patmatch(patsort,xsort,sortctx))
+    elseif patkindsym != xkindsym
+        return Error("Toplevel: $patkindsym != $xkindsym")
+    else
+        res = Dict{Symbol,MetaDiGraph}()
+        for i in 1:arity(pat, proot)
+            subpat = subgraph(pat, getarg(pat, proot, i))
+            subx = subgraph(x, getarg(x, xroot, i))
+            subsol = patmatch(subpat, subx, sortctx)
+            if subsol isa Error return subsol end
+            mergeIn!(res, subsol)
+        end
+        return res
+    end
+end
+
+"""Do I need to treat special case of root being a variable?"""
+function sub(pat::MetaDiGraph, d::MatchDict)::MetaDiGraph
+    pat = copy(pat)
+    debug = false 
+    wcs = collect(filter_vertices(pat, :kind, VarNode))
+    for wc in wcs
+        g = d[getsym(pat, wc)]
+        if gethash(g) != gethash(pat, wc)  # pattern var is replaced with something different
+            pat, newhead = merge_in(pat, g)
+            for inn in inneighbors(pat, wc)
+                add_edgeprop!(pat, inn, newhead, getargs(pat, inn, wc))
+                rem_edge!(pat, inn, wc)
+            end
+        end
+    end
+
+    out = rehash!(subgraph(pat))
+    set_indexing_prop!(out, :hash)
+    return out
+end
+
+"""
+We care about all the possible paths from root to a given wildcard symbol
+This recursively gets them all.
+"""
+function paths_to_sym(g::MetaDiGraph, path::Vector{Int}=Int[],node::Int=0,
+                      )::Dict{Symbol,Set{Vector{Int}}}
+    node = node == 0 ? root(g) : node
+
+    if getkind(g,node) == VarNode
+        return Dict{Symbol,Set{Vector{Int}}}(getsym(g,node)=>Set([path]))
+    else
+        subsols = [paths_to_sym(g,vcat(path,[i]),getarg(g,node,i))
+                    for i in 1:arity(g,node)]
+
+        return isempty(subsols) ? Dict{Symbol,Set{Vector{Int}}}() : merge(subsols...)
+    end
+end
+
+"""Compute hash, assuming neighbors' hashes are correctly computed."""
+function compute_hash(g::MetaDiGraph, node::Int)::String
+    hs = [gethash(g, getarg(g, node, i)) for i in 1:arity(g, node)]
+    return bytes2hex(sha256(join([getsym(g, node), getkind(g, node), hs...])))
+end
+
+"""Assume all hash values are incorrect and need to be recomputed.
+Modifies metadata of an existing MetaGraph (removes :hash as
+indexing property)"""
+function rehash_rec!(g::MetaDiGraph, node::Int)::Nothing
+    for n in neighbors(g, node) rehash_rec!(g, n) end
+    @assert set_prop!(g, node, :hash, compute_hash(g, node))
+    return nothing
+end
+
+function rehash!(g::MetaDiGraph, preferred::Set{Int} = Set{Int}())::MetaDiGraph
+    g = copy(g)
+    g.indices = Set{Symbol}()
+    rehash_rec!(g, root(g))
+    return rm_dups(g, preferred)
+end
+
+"""Assume a particular node's hash has changed. Recompute it, then
+work recursively upwards until we reach the root.
+function rehashup!(g::MetaDiGraph, node::Int)::String
+   IS THIS FUNCTION USEFUL? """
+
+"""Condense nodes such that things with identical hash are merged.
+Will return a metagraph with :hash set as indexing prop. For graphs where same
+hash means identical substructure, it does not matter that an arbtirary node of
+that hash value is kept."""
+function rm_dups(g::MetaDiGraph, preferred::Set{Int})::MetaDiGraph
+    trav = length(traverse(g, root(g)))
+    @assert trav == nv(g) "Can only quotient graphs with a root: $(simplerender(g)) has $trav / $(nv(g)) from root $(root(g))"
+    keep_nodes = Dict{String,Int}() # get_prop(g, root(g), :hash) => root(g))
+    for v in sort(vertices(g))
+        h = gethash(g, v)
+        if !haskey(keep_nodes, h) || v in preferred
+            keep_nodes[h] = v
+        end
+    end
+    g_ = copy(g) # don't modify input
+    keep = Set(values(keep_nodes))
+    for e in edges(g_)
+        if !(e.src in keep) @assert rem_edge!(g_, e)
+        elseif !(e.dst in keep)
+            args = get_prop(g_, e, :args)
+            newtar = keep_nodes[gethash(g_, e.dst)]
+            if !has_edge(g_, e.src, newtar)
+                @assert add_edgeprop!(g_, e.src, newtar, Int[])
+            end
+            oldargs = getargs(g_, e.src, newtar)
+            newargs = sort(vcat(oldargs, args))
+            @assert set_prop!(g_, e.src, newtar, :args, newargs)
+            @assert rem_edge!(g_, e)
+        end
+    end
+    for e in edges(g_)
+        @assert has_prop(g_, e, :args)
+    end
+    out = subgraph(g_, root(g_))
+    if length(keep_nodes) != nv(out) || any([!(has_prop(out, e, :args)) for e in edges(out)])
+        println("keep_nodes $(sort([(v, k[1:3]) for (k, v) in keep_nodes]))")
+        viz(out, true, false, "err_end")
+        throw(Exception(simplerender(g)))
+    end
+    return out # discard anything not connected to root
+end
+
+function add_edgeprop!(g::MetaDiGraph, src::Int, dst::Int, arg::Vector{Int})::Bool
+    a = add_edge!(g, src, dst)
+    b = set_prop!(g, src, dst, :args, arg)
+    return a && b
+end
+
+"""Add a new node with a dict of metadata."""
+function add_vertprop!(g::MetaDiGraph, p::Dict)::Int
+    @assert add_vertex!(g)
+    new = maxv(g)
+    @assert set_props!(g, new, p)
+    return new
+end
+
+"""Get vertex associated with a hash. Throw error if not found."""
+function hashindex(g::MetaDiGraph, hsh::String, safe::Bool = false)::Union{Nothing,Int}
+    hashmatch = collect(filter_vertices(g, :hash, hsh))
+
+    if length(hashmatch) == 1 return hashmatch[1]
+    elseif safe return nothing
+    else throw(DomainError("Bad hash $(hsh[1:3]) in $(simplerender(g)): $(length(hashmatch)) matches"))
+    end
+        end
+function topsort!(g::MetaDiGraph, v::Int, visit::Set{Int}, stack::Vector{Int})::Vector{Int}
+    push!(visit, v)
+    for n in neighbors(g, v)
+        if !(n in visit) topsort!(g, n, visit, stack) end
+    end
+    insert!(stack, 1, v)
+end
+function topsort(g::MetaDiGraph)::Vector{Int}
+visit = Set{Int}()
+stack = Vector{Int}([])
+for v in vertices(g) # start the process from each node
+    if !(v in visit) topsort!(g, v, visit, stack) end
+end
+return stack
+end
+
+"""
+Return a subgraph starting at a node dictated by a initial node
+and a sequence of steps, e.g. take arg #1, then arg #2, etc.
+"""
+function argwalk(g::MetaDiGraph, steps::Vector{Int},start::Int=0)::MetaDiGraph
+    curr = start == 0 ? root(g) : start
+    for step in steps
+        curr = getarg(g, curr, step)
+    end
+    return subgraph(g,curr)
+end
+function uninfer(g::MetaDiGraph)::MetaDiGraph
+    g = copy(g)
+    for i in collect(vertices(g))
+        if getkind(g, i) == SortedApp
+            for n in neighbors(g, i)
+                @assert set_prop!(g, i, n, :args, [i-1 for i in get_prop(g, i, n, :args)])
+            end
+            @assert rem_edge!(g, i, getarg(g, i, 1)) "error removing sort"
+        end
+    end
+
+    g = rehash!(subgraph(g))
+    set_indexing_prop!(g, :hash)
+    return g
 end
 
 
-
+#=
+Rewriting logic possible handled by SMT instead?
 """
 Try to match p2 to x and then sub result into p1
 Return the substitution and whether any change was made
@@ -421,19 +624,19 @@ function rewrite(x::MetaDiGraph,rules::Vector{Tuple{MetaDiGraph,MetaDiGraph}})::
     end
     # println("no changes can be made $(simplerender(x))")
     return x
+end =#
+
 end
 
+
+
+#=
 """
     Check if structure of pattern matches structure of graphterm recursively.
 If we encounter a (labeled) wildcard in the pattern, record the subgraph that it corresponds to.
 If the same wildcard label gets matched to two different subgraphs, then throw error.
 
-NOTE under a theory, two subgraphs that seem different may in fact be equal, so maybe this
-function should just return the list of patterns that get matched to, and the function caller
-can determine whether this is really an error or not.
-
-Concern: a variable in some top level operation uses the same variable in some nested
-operation. When we recursively match variables, there can be a name collision.
+Naive structural pattern matching
 """
 function patmatch(pat::MetaDiGraph, x::MetaDiGraph, path::Vector{Int}=Int[])
     # println("Entering patmatch $path with \n\tpat $(simplerender(pat))\n\tx=$(simplerender(x))")
@@ -503,182 +706,4 @@ function patmatch(pat::MetaDiGraph, x::MetaDiGraph, path::Vector{Int}=Int[])
         return subsols
     end
 end
-
-function sub(pat::MetaDiGraph, d::MatchDict)::MetaDiGraph
-    pat = copy(pat)
-    # println("Trying to sub with ",join(["$k $(simplerender(v))" for (k,v) in d], "\n"))
-    for wc in collect(filter_vertices(pat, :kind, WildCard))
-        g = d[getsym(pat, wc)]
-        pat, newhead = merge_in(pat, g)
-        for inn in inneighbors(pat, wc)
-            add_edgeprop!(pat, inn, newhead, getargs(pat, inn, wc))
-            rem_edge!(pat, inn, wc)
-            end
-        end
-
-    out = subgraph(pat)
-    out = rehash!(out)
-    set_indexing_prop!(out, :hash)
-    return out
-end
-
-"""
-We care about all the possible paths from root to a given wildcard symbol
-This recursively gets them all.
-"""
-function paths_to_sym(g::MetaDiGraph, path::Vector{Int}=Int[],node::Int=0,
-                      )::Dict{Symbol,Set{Vector{Int}}}
-    node = node == 0 ? root(g) : node
-
-    if getkind(g,node) == WildCard
-        return Dict{Symbol,Set{Vector{Int}}}(getsym(g,node)=>Set([path]))
-    else
-        subsols = [paths_to_sym(g,vcat(path,[i]),getarg(g,node,i))
-                    for i in 1:arity(g,node)]
-
-        return isempty(subsols) ? Dict{Symbol,Set{Vector{Int}}}() : merge(subsols...)
-    end
-end
-
-"""Compute hash, assuming neighbors' hashes are correctly computed."""
-function compute_hash(g::MetaDiGraph, node::Int)::String
-    hs = [gethash(g, getarg(g, node, i)) for i in 1:arity(g, node)]
-    return bytes2hex(sha256(join([getsym(g, node), getkind(g, node), hs...])))
-end
-
-"""Assume all hash values are incorrect and need to be recomputed.
-Modifies metadata of an existing MetaGraph (removes :hash as
-indexing property)"""
-function rehash_rec!(g::MetaDiGraph, node::Int)::Nothing
-    for n in neighbors(g, node) rehash_rec!(g, n) end
-    @assert set_prop!(g, node, :hash, compute_hash(g, node))
-    return nothing
-end
-
-function rehash!(g::MetaDiGraph, preferred::Set{Int} = Set{Int}())::MetaDiGraph
-    g = copy(g)
-    g.indices = Set{Symbol}()
-    rehash_rec!(g, root(g))
-    return rm_dups(g, preferred)
-end
-
-"""Assume a particular node's hash has changed. Recompute it, then
-work recursively upwards until we reach the root.
-function rehashup!(g::MetaDiGraph, node::Int)::String
-   IS THIS FUNCTION USEFUL? """
-
-"""Condense nodes such that things with identical hash are merged.
-Will return a metagraph with :hash set as indexing prop. For graphs where same
-hash means identical substructure, it does not matter that an arbtirary node of
-that hash value is kept."""
-function rm_dups(g::MetaDiGraph, preferred::Set{Int})::MetaDiGraph
-    trav = length(traverse(g, root(g)))
-    @assert trav == nv(g) "Can only quotient graphs with a root: $(simplerender(g)) has $trav / $(nv(g)) from root $(root(g))"
-    keep_nodes = Dict{String,Int}() # get_prop(g, root(g), :hash) => root(g))
-    for v in sort(vertices(g))
-        h = gethash(g, v)
-        if !haskey(keep_nodes, h) || v in preferred
-            keep_nodes[h] = v
-        end
-    end
-    g_ = copy(g) # don't modify input
-    keep = Set(values(keep_nodes))
-    for e in edges(g_)
-        if !(e.src in keep) @assert rem_edge!(g_, e)
-        elseif !(e.dst in keep)
-            args = get_prop(g_, e, :args)
-            newtar = keep_nodes[gethash(g_, e.dst)]
-            if !has_edge(g_, e.src, newtar)
-                @assert add_edgeprop!(g_, e.src, newtar, Int[])
-            end
-            oldargs = getargs(g_, e.src, newtar)
-            newargs = sort(vcat(oldargs, args))
-            @assert set_prop!(g_, e.src, newtar, :args, newargs)
-            @assert rem_edge!(g_, e)
-        end
-    end
-    for e in edges(g_)
-        @assert has_prop(g_, e, :args)
-    end
-    out = subgraph(g_, root(g_))
-    if length(keep_nodes) != nv(out) || any([!(has_prop(out, e, :args)) for e in edges(out)])
-        println("keep_nodes $(sort([(v, k[1:3]) for (k, v) in keep_nodes]))")
-        viz(out, true, false, "err_end")
-        throw(Exception(simplerender(g)))
-    end
-    return out # discard anything not connected to root
-end
-
-function add_edgeprop!(g::MetaDiGraph, src::Int, dst::Int, arg::Vector{Int})::Bool
-    a = add_edge!(g, src, dst)
-    b = set_prop!(g, src, dst, :args, arg)
-    return a && b
-end
-    """Add a new node with a dict of metadata."""
-function add_vertprop!(g::MetaDiGraph, p::Dict)::Int
-    @assert add_vertex!(g)
-    new = maxv(g)
-    @assert set_props!(g, new, p)
-    return new
-    end
-    """Get vertex associated with a hash. Throw error if not found."""
-function hashindex(g::MetaDiGraph, hsh::String, safe::Bool = false)::Union{Nothing,Int}
-    hashmatch = collect(filter_vertices(g, :hash, hsh))
-
-    if length(hashmatch) == 1 return hashmatch[1]
-    elseif safe return nothing
-    else throw(DomainError("Bad hash $(hsh[1:3]) in $(simplerender(g)): $(length(hashmatch)) matches"))
-    end
-        end
-function topsort!(g::MetaDiGraph, v::Int, visit::Set{Int}, stack::Vector{Int})::Vector{Int}
-    push!(visit, v)
-    for n in neighbors(g, v)
-        if !(n in visit) topsort!(g, n, visit, stack) end
-    end
-    insert!(stack, 1, v)
-end
-function topsort(g::MetaDiGraph)::Vector{Int}
-visit = Set{Int}()
-stack = Vector{Int}([])
-for v in vertices(g) # start the process from each node
-    if !(v in visit) topsort!(g, v, visit, stack) end
-end
-return stack
-end
-
-"""
-Return a subgraph starting at a node dictated by a initial node
-and a sequence of steps, e.g. take arg #1, then arg #2, etc.
-"""
-function argwalk(g::MetaDiGraph, steps::Vector{Int},start::Int=0)::MetaDiGraph
-    curr = start == 0 ? root(g) : start
-    for step in steps
-        curr = getarg(g, curr, step)
-    end
-    return subgraph(g,curr)
-end
-function uninfer(g::MetaDiGraph)::MetaDiGraph
-    g = copy(g)
-    if getkind(g) == SortedTerm
-        newroot = getarg(g, root(g), 2)
-        @assert rem_edge!(g, root(g), getarg(g, root(g), 1)) # for good measure
-        @assert rem_edge!(g, root(g), getarg(g, root(g), 2)) # for good measure
-        set_prop!(g, :root, newroot)
-    end
-    for i in collect(vertices(g))
-        for j in collect(neighbors(g, i))
-            if getkind(g, j) == SortedTerm
-                tar = getarg(g, j, 2)
-                @assert add_edgeprop!(g, i, tar, get_prop(g, i, j, :args)) "error adding $i -> $tar"
-                @assert rem_edge!(g, i, j) "error removing $i->$j"
-            end
-        end
-    end
-
-    g = rehash!(subgraph(g))
-    set_indexing_prop!(g, :hash)
-    return g
-end
-end
-
-
+=#

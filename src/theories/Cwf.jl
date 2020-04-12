@@ -1,6 +1,11 @@
 module Cwf
 export cwf
-using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, extend, infer
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../GraphTerm.jl")
+    using .GraphTerm
+else
+    using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, uninfer, infer, patmatch, sub
+end
 
 #############
 # CONTEXTS #
@@ -173,370 +178,38 @@ pisub2 = App(:Pi,[AyΓαγ, pisub22])
 pisubdecl = Rule("Pi substitution", App(:Tyact,[ΠAB,γ]), pisub2)
 
 
-cwf = extend(cwf, [], [pidecl, lamdecl], [pisubdecl,piliftdecl], "cwf7")
-# print(render(cwf))
 
 
 ΓliftA = App(:ext,[Γ,Lift])
 nsort = Var(:N,Sort(:el,[ΓliftA,liftB]))
-liftM = App(:lam,[Var(:N,Sort(:el,[ΓliftA,liftB]))])
-
-# INFER is constructing an ill-formed term with liftM
-# The lift operator is pointed to by node 6 and node 36
-# NEED TO RESOLVE
-
+liftM = App(:lam,[nsort])
 llndecl = Rule("Lambda Lifting Naturality",lamM,liftM)
 
-# lamsubdecl = Rule("Lambda Substitution",,)
-# pieldecl = Rule("Pi Elination",,)
-# appldecl = Rule("App lifting naturality",,)
-# appsdecl = Rule("App substitution",,)
-# piudecl = Rule("Pi Unicity",,)
-# picdecl = Rule("Pi computation",,)
+lamMy = App(:Tyact, [lamM, γ])
+yopq = App(:snoc,[App(:cmp,[P,γ]), Q])
+lamMypq = App(:lam,[App(:Elact, [M, yopq])])
+lamsubdecl = Rule("Lambda Substitution", lamMy, lamMypq)
+
+appsort = Sort(:el, [Γ, App(:Tyact, [B, App(:snoc,[idΓ, a])])])
+
+λM = Var(:M, lamsort)
+appdecl = OpDecl(:app, 2, appsort, [λM,a], "Pi elimination")
+λMa  = App(:app, [λM,a])
+
+λMalift = App(:app, [nsort,a])
+appldecl = Rule("App lifting naturality", "This is confusingly notated in the paper. Cannot be checked until we have type-checking.",
+                 λMa, λMalift)
+as2 = App(:app,[App(:Elact,[λM,γ]), App(:Elact,[a,γ])])
+appsdecl = Rule("App substitution",App(:Elact, [λMa, γ]),as2)
+pu2 = App(:lam,[App(:app,[App(:Elact,[M,P]), Q])])
+piudecl = Rule("Pi Unicity",λM,pu2)
+
+picdecl = Rule("Pi computation",App(:app,[M,a]),App(:Elact,[M,App(:snoc,[idΓ,a])]))
+
+cwf = extend(cwf, [], [pidecl, lamdecl, appdecl], [pisubdecl,piliftdecl, llndecl,
+    lamsubdecl, appldecl, appsdecl, piudecl,picdecl], "cwf7", true)
+
+
+print(render(cwf, picdecl))
 
 end
-
-"""
-################################
-# ******* Theory: cwf7 ******* #
-################################
-
-6 sorts, 19 ops, 18 rules
-
-#########
-# Sorts #
-#########
-
-==================================================
-
----------   lvl
-lvl  sort
-
-Hierarchy of type universes
-
-
-==================================================
- α,β:lvl
----------   lt
-α<β  sort
-
-A witness to the relative ordering of two universes in the type hierarchy
-
-
-==================================================
-
----------   Ctx
-Ctx  sort
-
-Contexts: Concretely, a mapping xᵢ:Xᵢ of free variables to types.
-Consider these as objects in a category C.
-
-
-==================================================
-Γ:Ctx  α:lvl
-------------   Ty
-Tyα(Γ)  sort
-
-The sort of types in context Γ (of size α)
-
-
-==================================================
- A,B:Ctx
----------   Hom
-A→B  sort
-
-Substitutions between contexts: concretely, a substitution bᵢ:βᵢ↦aᵢ:αᵢ.
-Consider these as morphisms in the category C.
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α:lvl
-----------------------   el
-    𝐄𝐥(Γ⊢A)  sort
-
-The sort of terms of type A (in ctx Γ), where A is of size α
- 'This is to fix a dependent presheaf El: Psh(ctx)/Tyα, i.e. a nat. trans. π: El→Tyα'
-
-
-##############
-# Operations #
-##############
-
-==================================================
-r:α′<β  q:α<α′  α,α′,β:lvl
---------------------------   ⪡
-      (q ⪡ r) : α<β
-
-< transitivity
-
-
-==================================================
-  α:lvl
----------   suc
-α+1 : lvl
-
-Successor
-
-
-==================================================
-α,β:lvl  p:α<β
----------------   ltlift
-(p)+1 : α+1<β+1
-
-Successor relation preserves ordering
-
-
-==================================================
-
--------   zero
-0 : lvl
-
-Type level of sets
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α,β:lvl  p:α<β
--------------------------------   lift
-        ⇧(p,A) : Tyβ(Γ)
-
-Lifts a type of level α to some β>α
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α:lvl
-----------------------   ext
-     (Γ.A) : Ctx
-
-Context compreshension operation
-
-
-==================================================
-B:Tyα((Γ.A))  A:Tyα(Γ)  Γ:Ctx  α:lvl
-------------------------------------   Pi
-          Π(A,B) : Tyα(Γ)
-
-Π formation
-
-
-==================================================
-   A:Ctx
------------   id
-id(A) : A→A
-
-The identity morphism
-
-
-==================================================
-f:A→B  g:B→C  A,B,C:Ctx
------------------------   ⋅
-     (f ⋅ g) : A→C
-
-Composition, only defined for pairs of morphisms that match head-to-tail, is an associative operation which picks out a third.
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  α:lvl  Γ,Δ:Ctx
--------------------------------   Tyact
-         A[γ] : Tyα(Δ)
-
-Substitution action: apply the substitution γ (of type Δ→Γ) to a some type A (in ctx Γ) to obtain a term of type Δ
-
-
-==================================================
-
--------   emp
-⋅ : Ctx
-
-The category C has a terminal object: the empty context
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  α:lvl  Γ,Δ:Ctx  a:𝐄𝐥(Γ⊢A)
-------------------------------------------   Elact
-            a[γ] : 𝐄𝐥(Δ⊢A[γ])
-
-Substitution action: apply the substitution γ (of type Δ→Γ) to a term of type A (in ctx Γ)
-Result: a term of type A[γ] (in ctx Δ)
-
-
-==================================================
-B:Tyα((Γ.A))  A:Tyα(Γ)  M:𝐄𝐥((Γ.A)⊢B)  Γ:Ctx  α:lvl
----------------------------------------------------   lam
-                λ(M) : 𝐄𝐥(Γ⊢Π(A,B))
-
-Π introduction
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  N:𝐄𝐥(Δ⊢A[γ])  α:lvl  Γ,Δ:Ctx
----------------------------------------------   snoc
-               ⟨γ,N⟩ : Δ→(Γ.A)
-
-???
-
-
-==================================================
-    Γ:Ctx
---------------   empsubst
-!(Γ) : Γ→emp()
-
-Substitution into an empty context
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α:lvl
-----------------------   p
-    𝐩(A) : (Γ.A)→Γ
-
-Projection function 'drop'???
-
-
-==================================================
- A:Tyα(Γ)  Γ:Ctx  α:lvl
-------------------------   q
-𝐪(A) : 𝐄𝐥((Γ.A)⊢A[𝐩(A)])
-
-Projection function 'var'???
-
-
-==================================================
-     α:lvl
----------------   lts
-α < α+1 : α<α+1
-
-Every rank's successor is greater than itself
-
-
-==================================================
-       α:lvl
---------------------   ltz
-0 < α+1 : zero()<α+1
-
-Every rank's successor is greater than 0
-
-
-###################
-# Equality Axioms #
-###################
-
-==================================================
-  η:Γ→emp()  Γ:Ctx
---------------------   ! unique
-!(Γ) = η   : Γ→emp()
-
-Substitution into an empty context is unique.
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  N:𝐄𝐥(Δ⊢A[γ])  α:lvl  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
-------------------------------------------------------   Comp comp
-       (δ ⋅ ⟨γ,N⟩) = ⟨(δ ⋅ γ),N[δ]⟩   : Ξ→(Γ.A)
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α,β:lvl  p:α<β
--------------------------------   Context lifting
-  (Γ.A) = (Γ.⇧(p,A))   : Ctx
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α,β:lvl  p:α<β
--------------------------------   Element lifting
- 𝐄𝐥(Γ⊢A) = 𝐄𝐥(Γ⊢⇧(p,A))   sort
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  r:α′<β  q:α<α′  α,α′,β:lvl  p:α<β
---------------------------------------------------   Lift composition
-         ⇧(p,A) = ⇧(r,⇧(q,A))   : Tyβ(Γ)
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  Γ,Δ:Ctx  α,β:lvl  p:α<β
-----------------------------------------   Lift substitution
-    ⇧(p,A[γ]) = ⇧(p,A)[γ]   : Tyβ(Δ)
-
-
-==================================================
-p,p′:α<β  α,β:lvl
------------------   Ord unique
- p = p′   : α<β
-
-The sort α<β is a singleton
-
-
-==================================================
-   B:Tyα((Γ.A))  γ:Δ→Γ  A:Tyα(Γ)  α:lvl  Γ,Δ:Ctx
----------------------------------------------------   Pi substitution
-Π(A,B)[γ] = Π(A[γ],B[⟨(𝐩(A) ⋅ γ),𝐪(A)⟩])   : Tyα(Δ)
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  α:lvl  a:𝐄𝐥(Γ⊢A)  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
----------------------------------------------------   Term substitution composition
-     a[(δ ⋅ γ)] = a[γ][δ]   : 𝐄𝐥(Ξ⊢A[(δ ⋅ γ)])
-
-The functor to Fam from C preserves composition of substitutions:
-Applying two substitutions in sequence is the same as applying the composition of the substitutions in C
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α:lvl  a:𝐄𝐥(Γ⊢A)
----------------------------------   Term substitution identity
-    a = a[id(Γ)]   : 𝐄𝐥(Γ⊢A)
-
-The identity substitution on a term yields the same term
-
-
-==================================================
-A:Tyα(Γ)  Γ:Ctx  α:lvl
------------------------   Ty identity
-A = A[id(Γ)]   : Tyα(Γ)
-
-Applying the identity substitution (on ctx Γ) to a type in ctx Γ yields the same type
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  α:lvl  δ:Ξ→Δ  Γ,Δ,Ξ:Ctx
-----------------------------------------   Ty preserves composition
-    A[(δ ⋅ γ)] = A[γ][δ]   : Tyα(Ξ)
-
-The functor to Fam from C preserves composition of substitutions:
-applying two substitutions in sequence is the same as applying the composition of the substitutions in C
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  N:𝐄𝐥(Δ⊢A[γ])  α:lvl  Γ,Δ:Ctx
----------------------------------------------   Universal property of 𝐩
-         γ = (⟨γ,N⟩ ⋅ 𝐩(A))   : Δ→Γ
-
-
-==================================================
-γ:Δ→Γ  A:Tyα(Γ)  N:𝐄𝐥(Δ⊢A[γ])  α:lvl  Γ,Δ:Ctx
----------------------------------------------   Universal property of 𝐪
-       N = 𝐪(A)[⟨γ,N⟩]   : 𝐄𝐥(Δ⊢A[γ])
-
-
-==================================================
-  f:A→B  g:B→C  A,B,C,D:Ctx  h:C→D
--------------------------------------   ⋅ associativity
-((f ⋅ g) ⋅ h) = (f ⋅ (g ⋅ h))   : A→D
-
-
-==================================================
-    f:A→B  A,B:Ctx
------------------------   ⋅ left-identity
-f = (id(A) ⋅ f)   : A→B
-
-
-==================================================
-    f:A→B  A,B:Ctx
------------------------   ⋅ right-identity
-f = (f ⋅ id(B))   : A→B
-
-
-==================================================
-        A:Tyα(Γ)  Γ:Ctx  α:lvl
----------------------------------------   𝐩𝐪 property
-id((Γ.A)) = ⟨𝐩(A),𝐪(A)⟩   : (Γ.A)→(Γ.A)
-"""

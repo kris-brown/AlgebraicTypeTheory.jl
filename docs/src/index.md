@@ -37,7 +37,7 @@ could be written as `@term (((((id() * X) * Y) * Z) * id()) * X)`
 
 ## Status
 
-Theories: implementations for [Boolean algebras](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Boolean.jl), [preorders](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Preorder.jl), [monoids](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Monoid.jl), [categories](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cat.jl), an [algebraicized Martin-Löf type theory](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cwf_no_level.jl) (not complete yet).
+Theories: implementations for [Boolean algebras](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Boolean.jl), [preorders](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Preorder.jl), [monoids](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Monoid.jl), [categories](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cat.jl), an [algebraicized Martin-Löf type theory](https://github.com/kris-brown/AlgebraicTypeTheory.jl/blob/master/src/theories/Cwf.jl) (not complete yet).
 
 ## Overview
 

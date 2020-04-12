@@ -2,8 +2,15 @@ using Test
 using MetaGraphs
 using LightGraphs
 
-using AlgebraicTypeTheory.Graph
-using AlgebraicTypeTheory.GraphTerm
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../src/Graph.jl")
+    include("../src/GraphTerm.jl")
+    using .Graph
+    using .GraphTerm
+else
+    using AlgebraicTypeTheory.Graph
+    using AlgebraicTypeTheory.GraphTerm
+end
 
 ############################################################################
 Γ, Δ = [Var(x, Sort(:Ob)) for x in [:Γ,:Δ]]
@@ -24,20 +31,18 @@ asc1, asc2 = [App(:+, z) for z in [[q1,App(:+, [q2,q3])], [App(:+, [q1,q2]),q3]]
 Intt = SortDecl(:N, "ℕ", Term[], "Natural Number")
 pluss = OpDecl(:+, "binary", Sort(:N), [x1, x2], "Add two numbers")
 asc = Rule("asc", "associative", asc1, asc2)
-th = Theory([Intt], [pluss], [asc], "Addition!")
+th = Theory([Intt], [pluss], [asc], "Addition!", true)
+xx = infer(th, x.g) # what to test about this?
+th_ = Theory([Intt], [pluss], [asc], "Addition!")
 
-m = patmatch(th.rules[1].t2, infer(th, x))
-x_ = uninfer(sub(th.rules[1].t1, m))
-@test string(x_) == "+(x1:N, +(x2:N, +(x3:N, x4:N)))"
-@test render(th) isa String
+@test render(th_) isa String
 validate(th)
+
 ################################################################################
-@test mkPat(mkPat(x)) == mkPat(x)
-@test unPat(infer(th, x)) == x
-@test extend(th, [Intt], [pluss], [asc]) == th
-@test extend(th, [], [], []) == th
+#@test extend(th, [Intt], [pluss], [asc]) == th
+#@test extend(th, [], [], []) == th
 ################################################################################
-List = SortDecl(:list,"[{}]",[x1],"List of length x1")
+#=List = SortDecl(:list,"[{}]",[x1],"List of length x1")
 
 lx, lq, lx2,lq2 = [Var(v,Sort(:list,[z])) for (v,z) in
                     zip([:lx,:lq, :lx2,:lq2],[x1,q1,x2,q2])]
@@ -50,3 +55,4 @@ t2 = App(:cat,[lx,lx2])
 lx12=Var(:e,Sort(:list,[App(:+, [x1,x2])]))
 lx21=Var(:f,Sort(:list,[App(:+, [x2,x1])]))
 t = App(:cat,[App(:cat,[lx12,lx12]),App(:cat,[lx21,lx12])])
+=#

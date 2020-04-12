@@ -1,6 +1,11 @@
 module Boolean
 export boolalg
-using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../GraphTerm.jl")
+    using .GraphTerm
+else
+    using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, uninfer, infer, patmatch, sub
+end
 
 bool = Sort(:Bool)
 booldec = SortDecl(:Bool, "The underlying set of a boolean algebra")

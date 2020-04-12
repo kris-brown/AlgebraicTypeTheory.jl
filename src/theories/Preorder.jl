@@ -1,6 +1,11 @@
 module Preorder
 export preorder
-using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render
+if isdefined(@__MODULE__, :LanguageServer)
+  include("../GraphTerm.jl")
+  using .GraphTerm
+else
+  using AlgebraicTypeTheory.GraphTerm: Sort, Var, App, OpDecl, SortDecl, Term, Rule, Theory, render, uninfer, infer, patmatch, sub
+end
 
 obdecl = SortDecl(:ob, "Underlying set of preorder")
 A,B,C = [Var(x,Sort(:ob)) for x in [:A,:B,:C]]
@@ -10,8 +15,8 @@ p,q,r = [Var(x,y) for (x,y) in [:p=>ab,:q=>bc,:r=>ab]]
 refl = OpDecl(:refl,"{}ᵣ",aa,[A],"Reflexivity")
 trans = OpDecl(:trans,"({}⪯{})",ac,[p,q],"Transitivity")
 singl = Rule("Singleton","The sort A->B is a singleton set.",p,r,)
-preorder=Theory([obdecl,leqdecl],[refl,trans],[singl],"Preorder")
-print(render(preorder))
+preorder = Theory([obdecl,leqdecl],[refl,trans],[singl],"Preorder")
+# print(render(preorder))
 end
 
 """

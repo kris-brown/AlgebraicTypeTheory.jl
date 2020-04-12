@@ -146,12 +146,13 @@ function instEval(i::Instance,g::MetaDiGraph,n::Int=0,
     # println("insteval $n")
     sym, kind = getsym(g,n), getkind(g,n)
     if !haskey(res,n)
-        if kind in [AppNode,SortNode]
+        if kind in [AppNode,SortNode, SortedApp]
             f = kind == AppNode ? i.funcs[sym] : i.types[sym].sym
             for m in neighbors(g,n)
                 merge!(res,instEval(i, g, m, res))
             end
-            arg_inds = [getarg(g,n,i) for i in 1:arity(g,n)]
+            offset = kind == SortedApp ? 2 : 1
+            arg_inds = [getarg(g,n,i) for i in offset:arity(g,n)]
             args = Any[res[a] for a in arg_inds]
             res[n] = funcEval(f, args)
         elseif kind == VarNode
@@ -164,15 +165,3 @@ function instEval(i::Instance,g::MetaDiGraph,n::Int=0,
 end
 end
 
-
-# function funcEval(f::T, args::Vector{Any}
-#                   )::Expr where {T<:Union{JuliaFunction, JuliaType}}
-#     function tmp end
-#     println("Eval $(f.sym) $args")
-#     # addmethod!(Tuple{typeof(tmp),values(f.args)...}, f.impl)
-#     addmethod!(Tuple{typeof(tmp),repeat([Any], length(f.args))...}, f.impl)
-#     return Expr(:call, tmp, args...)
-#     # if arg_expr return :($tmp(args...))
-#     # else  return :($tmp($(args)...))
-#     # end
-# end

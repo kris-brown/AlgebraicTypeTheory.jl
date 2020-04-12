@@ -1,8 +1,8 @@
 using Test
 
-@testset "Graph" begin
-    include("testgraph.jl")
-end
+# @testset "Graph" begin
+#     include("testgraph.jl")
+# end
 
 @testset "Term" begin
     include("testgraphterm.jl")
@@ -12,6 +12,6 @@ end
     include("testinst.jl")
 end
 
-@testset "Norm" begin
-    include("testnorm.jl")
-end
+# @testset "Norm" begin
+#     include("testnorm.jl")
+# end
