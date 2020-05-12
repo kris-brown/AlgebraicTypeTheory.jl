@@ -453,128 +453,6 @@ end
 
 ############################################################################
 
-"""Infer the sort of an appnode. Modify it to become a SortedApp
-"""
-#=
-function infer(th::Theory, t::Term)::Term
-    sts = isempty(collect(filter_vertices(t.g, :kind, SortedApp)))
-    if !sts
-        viz(t, false, true,"alreadyinferred")
-        @assert false "Cannot infer something already inferred: $(simplerender(t)) $sts"
-    end
-    res = infer(th, copy(t.g))
-    try
-        return Term(res)
-    catch m
-        viz(t.g, true,false,"inferErrorG")
-        viz(res, false,true, "inferErrorRes")
-        throw(m)
-    end
-end
-
-function infer(th::Theory, g::MetaDiGraph)::MetaDiGraph
-    # println("STARTING INFER W/ $(simplerender(g))")
-    seen = Set{String}()
-    preferred = sort(collect(vertices(g)))  # when reindexing, default to these values
-    first(g.indices) # make sure we have :hash index
-    function next()::Union{Int,Nothing}  # take something leafside
-        for v in vertices(g)
-            if (
-                !(gethash(g, v) in seen) &&
-                Set([gethash(g, e) for e in neighbors(g, v)]) ⊆ seen
-            )
-                return v
-            end
-        end
-    end
-
-    n = next()
-    while !(n === nothing)
-        sorti = nothing
-        sym, kind = [get_prop(g, n, x) for x in [:sym, :kind]]
-        viewhsh = gethash(g, n, true)
-        inds = [x[1:3] for x in seen]
-        # println("$viewhsh $sym $kind seen $(sort(inds))")
-        if kind == VarNode
-            sorti = neighbors(g, n)[1]
-        elseif kind == AppNode
-            matches = MatchDict[]
-            op_pat = th.ops[sym].sort
-            infered_args = th.ops[sym].args
-            for i in 1:arity(g, n)
-                argpat = infered_args[i]
-                argterm_ = subgraph(g, getarg(g, n, i))
-                set_indexing_prop!(argterm_, :hash)
-                argterm = Term(argterm_) # make sure this is well-formed
-                validate(th, argterm.g)
-                if getkind(argterm) != SortedTerm
-                    viz(g,false, true,"BadArgterm")
-                    @assert false "Bad argterm $(getarg(g, n, i)) is not SortedTerm"
-                end
-                m = patmatch(argpat, argterm)
-                if m isa Error
-                    #viz(argpat, true); viz(argterm, true)
-                    viz(g,false, false,"inferPatmatchErr")
-                    @assert false "$sym @ $viewhsh arg $i: $(m.err)"
-                end
-                push!(matches, m)
-            end
-            newsort = isempty(matches) ? op_pat : sub(op_pat, merge(matches...))
-            first(g.indices)
-            # what we substituted was already inferred
-            g, sorti = merge_in(g, newsort.g)
-            for i in traverse(g, sorti)
-                ghi = gethash(g, i)
-                if !(ghi in seen)
-                    # println("\tadding $(ghi[1:3]) from sort")
-                    push!(seen, gethash(g, i))
-                    if getkind(g,i)==SortedTerm
-                        child = getarg(g,i,2)
-                        for inn in inneighbors(g,child)
-                            if !(gethash(g,inn) in seen)
-                                add_edgeprop!(g, inn, i, get_prop(g,inn,child,:args))
-                                rem_edge!(g,inn,child)
-                            end
-                        end
-                    end
-                end
-            end
-
-        elseif kind in [SortNode, SortedTerm] # pass
-        else
-            viz(g,false,false,"DomainError")
-            throw(DomainError("$(simplerender(g)) $viewhsh $kind"))
-        end
-
-        if kind in [AppNode, VarNode]
-            st = add_vertprop!(g, Dict(:kind => SortedTerm, :sym => Symbol()))
-            set_indexing_prop!(g, st, :hash, compute_hash(g, st))
-            # println("$n: add $st ")
-            if n == root(g)
-                @assert set_prop!(g, :root, st)
-            else
-                # println("\t$n $sym inneighbors $(collect(inneighbors(g, n)))")
-                for i in collect(inneighbors(g, n))
-                    # println("\t$(getkind(g, i)) adding $i->$st ($(getkind(g, st))) and removing $i->$n ($(getkind(g, n)))")
-                    @assert add_edgeprop!(g, i, st, get_prop(g, i, n, :args))
-                    @assert getkind(g, n) in [AppNode, VarNode, WildCard]
-                    @assert rem_edge!(g, i, n)
-                end
-            end
-            @assert add_edgeprop!(g, st, sorti, [1])
-            @assert add_edgeprop!(g, st, n, [2])
-        end
-
-        # println("adding $(gethash(g, n,true)) ")
-
-        push!(seen, gethash(g, n))
-        seeninds = Set([v for v in vertices(g) if gethash(g, v) in seen])
-        g = rehash!(g, seeninds)
-        set_indexing_prop!(g, :hash)
-        n = next()
-    end
-    return g # nothing left to infer
-end =#
 function infer(th::Theory, t::Term)::Term
     Term(infer(th, t.g))
 end
@@ -653,12 +531,6 @@ end
 function uninfer(s::Rule)::Rule
     Rule(s.name, s.desc, uninfer(s.t1), uninfer(s.t2))
 end
-##############################################################################
-
-# function rewrite(r::Rule, x::Term)::Term
-#     Term(sub(r.t1, patmatch(r.t2, x.g)))
-# end
-##############################################################################
 
 function sym_arity(op::T)::Int where {T<:Union{OpDecl,SortDecl}}
     length(Set(FormatExpr(op.pat).entries))
@@ -839,8 +711,3 @@ function getSig(x::Rule)::Premises
 end
 
 end
-############################################################################
-# function normalize(t::Theory,x::Term)::Term
-#     res = rewrite(x.g, Tuple{MetaDiGraph,MetaDiGraph}[(mkPat(r.t1).g,mkPat(r.t2).g) for r in t.rules])
-#     return Term(res)
-# end

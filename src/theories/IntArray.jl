@@ -18,21 +18,22 @@ zeroOp = OpDecl(:Z,"0",Int,"Zero")
 trueOp = OpDecl(:T,"⊤",Bool,"True")
 falseOp = OpDecl(:F,"⊥",Bool,"Falsum")
 Zero, True, False = [App(x) for x in [:Z, :T, :F]]
+ZeZ = App(:E,[Zero,Zero])
 
 # Symbol, number of arguments, result sort, argument sorts, name
 sucOp = OpDecl(:S, 1, Int, [i], "Successor")
-eqOp = OpDecl(:≡, "binary", Bool, [i, j], "Boolean equality")
+eqOp = OpDecl(:E, "({1}≡{2})", Bool, [i, j], "Boolean equality")
 iteOp = OpDecl(:ite, 3, Ob, [b, o, p],  "If-then-else")
 readOp = OpDecl(:read, 2, Ob, [A, i],  "Read array at position i")
 writeOp = OpDecl(:write, 3, Arr, [A, i, o], "Write to array at position i")
 
 row = Rule("Read over write",
            App(:read,[App(:write, [A, i, o]), j]),
-           App(:ite, [App(:≡, [i, j]), o, App(:read,[A, j])]))
-eq2 = Rule("eq2", App(:≡,[i,j]), App(:≡,[App(:S,[i]), App(:S,[j])]))
-eq1 = Rule("eq1", App(:≡,[Zero,Zero]), True)
-eq3 = Rule("eq3", App(:≡,[Zero,App(:S,[i])]), False)
-eq4 = Rule("eq4", App(:≡,[App(:S,[i]),Zero]), False)
+           App(:ite, [App(:E, [i, j]), o, App(:read,[A, j])]))
+eq2 = Rule("eq2", App(:E,[i,j]), App(:E,[App(:S,[i]), App(:S,[j])]))
+eq1 = Rule("eq1", ZeZ, True)
+eq3 = Rule("eq3", App(:E,[Zero,App(:S,[i])]), False)
+eq4 = Rule("eq4", App(:E,[App(:S,[i]),Zero]), False)
 if1 = Rule("if1", App(:ite, [True,o,p]), o)
 if2 = Rule("if2", App(:ite, [False,o,p]), p)
 
@@ -46,26 +47,43 @@ One = App(:S,[Zero])
 op = App(:write, [App(:write,[A,One,p]), Zero, o])
 readop = App(:read,[op, One])
 
-default_examples = Dict("Zero" => Zero, "One" => One,
-                        "oObj" => o, "pObj" => p, "op" => op, "readop" => readop,)
+default_examples = ["Zero" => Zero, "One" => One, "True"=>True, "ZeZ" => ZeZ,
+                    "False" => False, "OeO" => App(:E, [One, One]),
+                    "oObj" => o, "pObj" => p, "op" => op, "readop" => readop]
 
-function writeCVC(depth=3, examples=default_examples)::Nothing
+default_extra = """
+QUERY rewrite1(ZeZ) /= True;
+%QUERY rewrite7(readop) /= pObj;
+COUNTERMODEL;
+
+% 7 Step rewrite from readop to p
+t1 :T = rewrite(readop, R0f, Empty, 1); % ite(E(Z, S(Z)), o, read(write(A, S(Z), p), S(Z)))
+t2 :T = rewrite(t1, R3f, P1, 2); % ite(F, o, read(write(A, S(Z), p), S(Z)))
+t3 :T = rewrite(t2, R6f, Empty,3); % read(write(A, S(Z), p), S(Z))
+t4 :T = rewrite(t3, R0f, Empty,4); % ite(E(S(Z), S(Z)), p, read(A, S(Z)))
+t5 :T = rewrite(t4, R2r, P1,5); % ite(E(Z, Z), p, read(A, S(Z)))
+t6 :T = rewrite(t5, R1f, P1,6); % ite(T, p, read(A, S(Z)))
+t7 :T = rewrite(t6, R5f, Empty,7); % p
+
+"""
+
+function writeCVC(examples=default_examples, extra=default_extra)::Nothing
     @assert haskey(ENV, "CVC4ROOT")
-    writeFile(intarray_inferred, examples, ENV["CVC4ROOT"] * "/IntArray.cvc", depth)
+    writeFile(intarray_inferred, examples, ENV["CVC4ROOT"] * "/IntArray.cvc",
+            extra, 4)
     return nothing
 end
-"""
-t1 :T = rewrite(rewrite(rewrite(rewrite(rewrite(rewrite(rewrite(
-				readop,		 % R(W(W(A,1,p),0,o),1)
-				R0f, Empty), % Convert to ite(0=1, o, ...)
-				R3f, P1),    % Convert 0=1 to ⊥
-				R6f, Empty), % Convert ite(...) to R(W(A,1,p),1)
-				R0f, Empty), % Convert to ite(1=1, p, R(A,1))
-				R2r, P1),    % Convert 1=1 to 0=0
-				R1f, P1),    % Convert 0=0 to ⊤
-				R5f, Empty); % Convert ite(⊤,p,R(A,1)) to p
-ASSERT t1 = pObj; % sat
-"""
+
+
+writeCVC()
+
+
+
+
+
+
+
+
 
 """
 

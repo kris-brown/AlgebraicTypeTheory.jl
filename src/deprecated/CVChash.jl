@@ -17,9 +17,12 @@ using DataStructures: DefaultDict
 using Combinatorics: permutations
 using LightGraphs: inneighbors
 
-"""
-Create CVC files that have a graph term structure.
-"""
+function allVars(t::Theory)::Dict{Symbol, Term}
+    k = x -> getSig(x).premises
+    return merge([k(s[2]) for s in t.sorts]...,
+                 [k(o[2]) for o in t.ops]...,
+                 [k(r) for r in t.rules]...)
+end
 
 """Maximum depth required to apply rewrite rules."""
 function maxdepth(r::Term)::Int
@@ -49,7 +52,7 @@ end
 E.g. the third argument of x's second argument: 'a3(a2(x))'
 """
 function pth2cvc(arg::Int, v::Vector{Int})::String
-    return string(join(["A$i(" for i in reverse(v)]),
+    return string(join(["a$i(" for i in reverse(v)]),
                   "x$arg", repeat(')', length(v)))
 end
 
@@ -91,15 +94,18 @@ end
 """Recursively convert a Term into a string in CVC language.
 Relies on convenience constructor functions existing."""
 function cvc(t::Theory, x::Term,
-             ctx::Dict{String,Set{String}}=Dict{String,Set{String}}(),
-             fv::Dict{Symbol,Int}=Dict{Symbol,Int}())::String
+             ctx::Dict{String,Set{String}}=Dict{String,Set{String}}())::String
     if haskey(ctx,gethash(x))
         return first(ctx[gethash(x)])
+    elseif getkind(x) == VarNode
+        node = -parse(Int,gethash(x, true),base=16)
+        srt = cvc(t,getarg(x, 1), ctx)
+        return "mkVar($node, $srt)"
     else
-        s = getsym(x)
-        node = getkind(x) == VarNode ? fv[s] : symbolCode(t)[s]
-        args = join([','*cvc(t, getarg(x, i), ctx, fv) for i in 1:arity(x)])
-        println("NEED TO MODIFY CVC() to do -10*step-node for Freevars")
+        d = symbolCode(t)
+        node = d[getsym(x)]
+        args = join([','*cvc(t,getarg(x, i), ctx) for i in 1:arity(x)])
+
         return "ast$(arity(x))($node$args)"
     end
 end
@@ -109,7 +115,9 @@ function symbolCode(t::Theory)::Dict{Symbol, Int}
     e = d -> enumerate(sort(collect(keys(d))))
     sd = Dict(e(t.sorts))
     od = Dict([(i+length(sd), v) for (i,v) in e(t.ops)])
-    return Dict([(v, k) for (k,v) in collect(merge(sd, od))]) # 0-index
+    l = length(od)+length(sd)
+    vd = Dict([(i+l,v) for (i,v) in e(allVars(t))])
+    return Dict([(v, k) for (k,v) in collect(merge(sd, od, vd))]) # 0-index
 end
 
 """Sort or operation which has largest # of argument"""
@@ -125,7 +133,7 @@ any term that exists is well-typed.
 function renderPat(t::Theory, x::Term, ctx::Dict{String,Set{String}})::String
     code = symbolCode(t)
     g = x.g
-    sortcons = ["Node($(first(ctx[gethash(g,n)]))) = $(code[getsym(g,n)]) % $(getsym(g,n))"
+    sortcons = ["node($(first(ctx[gethash(g,n)]))) = $(code[getsym(g,n)]) % $(getsym(g,n))"
                 for n in traverse(g, 0, false) if getkind(g,n) in [SortedApp, SortNode]]
     eq = zs -> join(["$(first(zs))=$z" for z in zs[2:end]]," AND ")
     eqcons = [eq(collect(v)) for v in values(ctx) if length(v)>1]
@@ -134,13 +142,6 @@ function renderPat(t::Theory, x::Term, ctx::Dict{String,Set{String}})::String
     end
     cons = vcat(sortcons,eqcons)
     return join(cons, "\n\tAND ")
-end
-
-function freevars(t1:: Term, t2::Term)::Dict{Symbol,Int}
-    v1, v2 = [Set(keys(vars(x))) for x in [t1, t2]]
-    fv = enumerate(sort(collect(setdiff(v2, v1))))
-    return Dict([v=>-k for (k,v) in fv])
-
 end
 
 """Write part of the transition function"""
@@ -153,11 +154,39 @@ function renderRule(t::Theory, r::Int)::String
         ctx = getCtx(0, pat)
         srp, srt = [render(t, x) for x in [pat, term]]
         rpat = "% $srp\nr$r$(dir)pat : T -> BOOLEAN = LAMBDA(x0: T):\n\t$(renderPat(t, pat, ctx));"
-        freevar = freevars(pat, term)
-        rterm = "\n\n% $srp -> $srt\nr$r$(dir)term: (T,INT) -> T = LAMBDA(x0: T, step: INT):\n\t$(cvc(t, term, ctx, freevar));\n\n"
+        rterm = "\n\n% $srp -> $srt\nr$r$(dir)term: (T, INT) -> T = LAMBDA(x0: T, step: INT):\n\t$(cvc(t, term, ctx));\n\n"
         res = res * rpat * rterm
     end
     return res
+end
+
+"""Convenience function for constructing a sort in CVC4"""
+function sortConstructor(t::Theory, i::Int)::String
+    sym = Dict(v => k for (k, v) in symbolCode(t))[i]
+    decl = t.sorts[sym]
+    if isempty(decl.args) return "mk$i : T = ast($i,nilA); %$sym"
+    else
+        n = length(decl.args)
+        xs = ["x$(i-1)" for i in 1:(n)]
+        return "mk$i : ($(join(repeat(['T'], n),", ")))->T = LAMBDA($(join(xs,", ")):T): ast($i, l$n($(join(xs,", ")))); %$sym"
+    end
+end
+
+"""Convenience function for constructing a term operation in CVC4"""
+function opConstructor(t::Theory, i::Int)::String
+    sym = Dict(v => k for (k, v) in symbolCode(t))[i]
+    decl = t.ops[sym]
+    code = symbolCode(t) # Sym -> Int
+    ctx = getCtx(decl.args)
+    srt = cvc(t, decl.sort, ctx)
+    if isempty(decl.args) return "mk$i : T = ast($i,l1($srt));"
+    else
+        n = length(decl.args)
+        xs = ["x$(i-1)" for i in 1:(n)]
+        return string("mk$i : ($(join(repeat(['T'], n),", ")))->T =",
+                     "LAMBDA($(join(xs,", ")):T):\n\t",
+                     "ast($i, l$(n+1)($srt,$(join(xs,", ")))); %$sym")
+    end
 end
 
 """A CVC function which replaces some subterm of x with y"""
@@ -171,12 +200,11 @@ function replaceRec(p)::String
     return res * "y$(repeat(')',length(p)));"
 end
 
-function mkConcrete(t::Theory, cvals::Vector{Pair{String, Term}}, xtra::Dict{Symbol,Int})::String
+function mkConcrete(t::Theory, cvals::Vector{Pair{String, Term}})::String
     res = ""
     repDict = Dict{String,String}()
-
     for (k, v) in cvals
-        rawv = cvc(t, infer(t,v), Dict{String,Set{String}}(), xtra)
+        rawv = cvc(t, infer(t,v))
         vstr = reduce(replace, repDict, init=rawv)
         repDict[vstr] = k
         res *= "\n\n% $(render(t,v))\n$k: T = $vstr;"
@@ -188,63 +216,65 @@ end
 Construct CVC4 file, optionally write to a path
 """
 function writeFile(t::Theory, cvals::Vector{Pair{String, Term}}=Pair{String, Term}[],
-                   pth::String="", extra::String="", depth::Int=0)::String
+                   pth::String="", extra::String="")::String
     symc = symbolCode(t)
-    nsym = length(symbolCode(t))
-    extravars = Dict([v=>k+nsym for (k,v) in enumerate(collect(union(
-        [Set{Symbol}(keys(vars(x))) for (_, x) in cvals]...)))])
-
-    nodedict = Dict(v => k for (k, v) in merge(symc, extravars))
+    nodedict = Dict(v => k for (k, v) in symc)
+    nsym = length(nodedict)
     tf = [true, false]
     arts = arities(t)
     mx = max(values(arts)...)
     nr = length(t.rules)
     nsrt = length(t.sorts)
-    depth = depth == 0 ? maxdepth(t) : depth
-    paths = collect(Iterators.flatten([Iterators.product(repeat([0:mx], d)...) for d in 1:depth]))
+    depth = maxdepth(t)
+    paths = Iterators.flatten([Iterators.product(repeat([0:mx], d)...) for d in 1:depth])
     pathnames = ['P' * join(p) for p in paths]
-    pathi = Dict([v=>k for (k,v) in enumerate(paths)])
     xs = ["x$(i-1)" for i in 1:(mx+1)]
     l = i -> string("ast$i : (INT, $(join(repeat(["T"],i),','))) -> T = ",
                     "LAMBDA (n: INT, $(join(xs[1:i],", ")): T):\n\tast(n,",
+                    "mkHash$i(n,$(join(xs[1:i],", "))), ",
                     join(vcat(xs[1:i],repeat(["None"],mx-i+1)),", "), ");")
 
+    a = i -> string("a$i: T -> T = LAMBDA (x: T): head(",
+                    repeat("tail(",i),
+                    "args(x$(repeat(')', i+2));")
+    ga = i -> "ELSIF i = A$i THEN a$i(x)"
     len = i -> string(repeat("tail(",i), "l", repeat(')',i), "= nilA THEN $i")
     r = (i,d) -> "rule = R$i$d AND r$i$(d)pat(x) THEN r$i$(d)term(x, step)"
     getat = p -> "p = P$(join(p)) THEN a$(join(p,"(a"))(x$(join(repeat(')',length(p))))"
+    hshij = (i,j) -> string(
+        "mkHash$(j+1)(node(x),",
+        join([i==k ? 'y' : "a$k(x)" for k in 0:j],", "),")")
+    ri = i -> string(
+        "replace$i : (T,T) -> T = LAMBDA (x,y: T):\n\t",
+        "LET hsh = \n\t\tIF ",
+        i==mx ? "FALSE THEN 0 " :
+            join(["a$z(x)=None THEN "*hshij(i,z) for z in i+1:mx],"\n\t\tELSIF "),
+        "\n\t\tELSE ",hshij(i,mx), "\n\t\tENDIF\n\tIN ast(node(x),hsh,",
+        join([z == i ? 'y' : "a$z(x)" for z in 0:mx],","),");")
 
-    rij = (i,j) -> string(
-        "replace$(i)$(j) : (T,T) -> T = LAMBDA (x,y: T): ",
-        "ast(node(x), l$j($(join([i==z ? 'y' : join(['a',z,"(x)"]) for z in 0:j-1],','))));")
-    ri = i -> string("replace$i : (T,T) -> T = LAMBDA (x,y: T):\n\tIF    ",
-                      join(["len(args(x)) = $z THEN replace$(i)$z(x,y)" for z in i+1:mx+1], "\n\tELSIF "),
-                      "\n\tELSE Error % We covered every case\n\tENDIF;")
+    """
+    LET hsh = IF a2(x) = None THEN mkHash2(node(x), a0(x), y)
+    ELSIF a3(x) = None THEN mkHash3(node(x), a0(x), y, a2(x))
+    ELSE mkHash4(node(x), a0(x), y, a2(x), a3(x))
+    ENDIF;
+    IN
+    ast(node(x),hsh,a0(x),y,a2(x),a3(x));
+    """
     rat = p -> "p = P$(join(p)) THEN replaceP$(join(p))(x,y)"
 
-    rw = i -> string("rewrite$i : T -> T = LAMBDA (x0:T):\n\t",
-                     join([string("LET x$j = rewrite(x$(j-1),r$j,p$j,$j) IN\n\tIF x$j = Error OR ",
-                                  join(["x$j=x$k" for k in 0:j-1], " OR "),
-                                  " THEN Error ELSE")
-                            for j in 1:i],"\n\t"),
-                     "\n\tx$i $(join(repeat("ENDIF ",i)));")
-
-    ri = i -> string(
-        "replace$i : (T,T) -> T = LAMBDA (x,y: T):ast(node(x),",
-        join([z == i ? 'y' : "a$z(x)" for z in 0:mx],","),");")
+    rw = i -> string("rewrite$i : T -> T = LAMBDA (x:T):\n\t",
+                     join(repeat("rewrite(",i)),
+                     "x,", join(["r$j,p$j, $j)" for j in 1:i],","),
+                     ";")
     safeArg = i -> string(
         "A$i : T -> T = LAMBDA (x:T): ",
         "\n\tIF x = None THEN None ELSE a$i(x) ENDIF;")
 
-    pn = p -> "ELSIF p = P$(join(p)) THEN -1$(join(p))"
-    np = p -> string(
-        "normalize$(join(p)) : T -> T = LAMBDA(x: T):\n\t",
-        "LET n = getNAt(x,P$(join(p))) IN\n\t",
-        "IF x = None THEN None\n\tELSIF n < 0 THEN\n\t\tIF ",
-        join(["n=getNAt(x,P$(join(z))) THEN var(x,P$(join(z)))"
-              for z in Iterators.take(paths, pathi[p]-1)], "\n\t\tELSIF "),
-        "\n\t\tELSE var(x,P$(join(p)))\n\t\tENDIF\n\tELSE ",
-        length(p) == depth - 1 ? 'x' : string("ast(node(x),",
-        join(["normalize$(join(vcat(collect(p),i)))(A$i(x))" for i in 0:mx], ", "),')'),"\n\tENDIF;")
+    mh = i -> string("mkHash$i: (INT,$(join(repeat(['T'],i),','))) -> INT = LAMBDA(i:INT, $(join(xs[1:i],", ")): T): \n\t",
+                     "pairZ$(i+1)(i, $(join(["hash($x)" for x in xs[1:i]],", ")));")
+
+    # mkHash3: (INT,T,T,T) -> INT = LAMBDA(i:INT, x0,x1,x2: T): pairZ4(i, hash(x0),hash(x1),hash(x2))
+
     res = """% Generated with max arity $mx, max depth $depth
 
 $(replace(render(t), "\n" => "\n% "))
@@ -257,9 +287,12 @@ $(replace(render(t), "\n" => "\n% "))
 
 % Datatypes
 %----------
+
+
 DATATYPE
-    T = Error | None | ast (node: INT, $(join(["a$i: T" for i in 0:mx],", ")))
+    T = Error | None | ast (node: INT, hash: INT, $(join(["a$i: T" for i in 0:mx],", ")))
 END;
+
 
 DATATYPE % AUTO
     Path = Empty|$(join(pathnames, '|'))
@@ -269,82 +302,63 @@ DATATYPE % AUTO
     Rule = $(join(["R$(i-1)f | R$(i-1)r" for i in 1:nr], " | "))
 END;
 
+
+% Hash functions
+
+pairN2 : (INT, INT) -> INT = LAMBDA (x,y: INT):
+    (((x+y)*(x+y+1) DIV 2) + 2) MOD 433494437;
+
+pairN3 : (INT, INT, INT) -> INT = LAMBDA (x0,x1,x2: INT):
+    pairN2(pairN2(x0,x1),x2);
+
+pairN4 : (INT, INT, INT, INT) -> INT = LAMBDA (x0,x1,x2,x3: INT):
+    pairN2(pairN2(x0,x1),pairN2(x2,x3));
+
+pairN5 : (INT, INT, INT, INT, INT) -> INT = LAMBDA (x0,x1,x2,x3,x4: INT):
+    pairN2(pairN2(x0,x1),pairN3(x2,x3,x4));
+
+ZtoN : INT -> INT = LAMBDA(z:INT):
+    IF z < 0 THEN 2*(-z)-1
+    ELSE 2 * z
+    ENDIF;
+
+pairZ2 : (INT, INT) -> INT = LAMBDA (x,y: INT):
+    pairN2(ZtoN(x), ZtoN(y));
+
+pairZ3: (INT, INT, INT) -> INT = LAMBDA (x0,x1,x2: INT):
+    pairN3(ZtoN(x0), ZtoN(x1), ZtoN(x2));
+
+pairZ4: (INT, INT, INT, INT) -> INT = LAMBDA (x0,x1,x2,x3: INT):
+    pairN4(ZtoN(x0), ZtoN(x1), ZtoN(x2), ZtoN(x3));
+
+pairZ5: (INT, INT, INT, INT, INT) -> INT = LAMBDA (x0,x1,x2,x3,x4: INT):
+    pairN5(ZtoN(x0), ZtoN(x1), ZtoN(x2), ZtoN(x3), ZtoN(x4));
+
+$(join([mh(i) for i in 1:mx+1], "\n"))
+
 % Convenience functions
 %-----------------------
+
 % Constructing ASTs % AUTO
 ast0 : INT -> T = LAMBDA (n:INT):
-	ast(n$(repeat(", None",mx+1)));
+	ast(n, n $(repeat(", None",mx+1)));
 $(join([l(i) for i in 1:mx+1], "\n"))
 
-% Safe access to attributes of T % AUTO
-Node : T -> INT = LAMBDA (x:T):
-    IF x = None THEN 0 ELSE node(x) ENDIF;
+% Access top-level argument of T % AUTO
 $(join([safeArg(i) for i in 0:mx], '\n'))
 
-% Replace top-level arg when we don't know how arity
+% Replacing a top-level argument of an AST
 $(join([ri(i) for i in 0:mx], "\n"))
 
 % Replacing arbitrary element of an AST
 $(join([replaceRec(p) for p in paths], '\n'))
 
-%%%%%%%%%
-% RULES %
-%%%%%%%%%
+
+mkVar : (INT, T) -> T = LAMBDA(v:INT,srt:T): ast1(v, srt);
+
+% RULES
 
 $(join([renderRule(t,i-1) for i in 1:nr],"\n"))
-
-%%%%%%%%%%%%%%%%%%%%%%%%
-% PATHS INFRASTRUCTURE %
-%%%%%%%%%%%%%%%%%%%%%%%%
-
-getAt : (T, Path) -> T = LAMBDA(x:T, p:Path):
-    IF    p = Empty THEN x
-    ELSIF $(join([getat(p) for p in paths], "\n\tELSIF "))
-    ELSE Error
-    ENDIF;
-
-replaceAt : (Path, T, T) -> T = LAMBDA(p:Path, x,y: T):
-    IF    p = Empty THEN y
-    ELSIF $(join([rat(p) for p in paths], "\n\tELSIF "))
-    ELSE Error
-    ENDIF;
-
-pathNum : Path -> INT = LAMBDA(p:Path):
-    IF p = Empty THEN -1
-    $(join([pn(p) for p in paths],"\n\t"))
-    ELSE 0 % impossible
-    ENDIF;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%
-% RENAME INFRASTRUCTURE %
-%%%%%%%%%%%%%%%%%%%%%%%%%
-% note: variables cannot be leaf nodes b/c their first arg is their sort.
-
-getNAt : (T,Path) -> INT = LAMBDA (x:T, p:Path): Node(getAt(x,p));
-var : (T,Path) -> T = LAMBDA(x:T,p:Path): ast(pathNum(p),a0(x));
-
-% Normalize the wildcards introduced by rewrite rules
-
-$(join(reverse([np(p) for p in paths if length(p) <= depth - 1][2:end]),"\n\n"))
-
-
-normalize0 : T -> T = LAMBDA(x : T):
-LET n = getNAt(x,P0) IN
-    IF x = None THEN None
-    ELSIF n < 0 THEN var(x, P0)
-    ELSE ast(Node(x),normalize00(A0(x)),normalize01(A1(x)),normalize02(A2(x)))
-    ENDIF;
-
-normalize : T -> T = LAMBDA (x: T):
-    IF x = None THEN None
-    ELSIF Node(x) < 0 THEN var(x, Empty)
-    ELSE ast(Node(x),normalize0(A0(x)),normalize1(A1(x)),normalize2(A2(x)))
-    ENDIF;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-% REWRITE INFRASTRUCTURE %
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 
 % Top level rewrite of a term
 rewriteTop : (Rule, T, INT) -> T %AUTO
@@ -352,6 +366,19 @@ rewriteTop : (Rule, T, INT) -> T %AUTO
     IF    $(join([r(i-1,d) for i in 1:nr for d in "fr"],"\n\tELSIF "))
     ELSE Error
     ENDIF;
+
+getAt : (T, Path) -> T = LAMBDA(x:T, p:Path):
+    IF    p = Empty THEN x
+    ELSIF $(join([getat(p) for p in paths], "\n\tELSIF "))
+    ELSE Error
+    ENDIF;
+replaceAt : (Path, T, T) -> T = LAMBDA(p:Path, x,y: T):
+    IF    p = Empty THEN y
+    ELSIF $(join([rat(p) for p in paths], "\n\tELSIF "))
+    ELSE Error
+    ENDIF;
+
+
 
 rewrite : (T, Rule, Path, INT) -> T
     = LAMBDA (x: T, r: Rule, p: Path, step: INT):
@@ -376,7 +403,7 @@ $(join([rw(i) for i in 1:7], "\n"))
 
 % Concrete values
 %-----------------
-$(mkConcrete(t, cvals, extravars))
+$(mkConcrete(t, cvals))
 
 
 %------------
@@ -393,3 +420,30 @@ $extra
 end
 end
 
+"""
+%------------
+t1,t2,t3,t4,t5 : T;
+test,test2,test3,test4,test5 : BOOLEAN;
+ASSERT t1 = pObj;
+
+ASSERT t3 = rewrite(readop,R0f, Empty);
+
+ASSERT t2 = rewrite(rewrite(rewrite(rewrite(rewrite(rewrite(rewrite(
+				readop,
+				R0f, Empty), % Convert to ite(0=1, o, ...)
+				R3f, P1),    % Convert 0=1 to ⊥
+				R6f, Empty), % Convert ite(...) to read(write(A,1,p),1)
+				R0f, Empty), % Convert to ite(1=1, p, read(A,1))
+				R2r, P1),    % Convert 1=1 to 0=0
+				R1f, P1),    % Convert 0=0 to ⊤
+				R5f, Empty); % Convert ite(⊤,p,read(A,1)) to p
+
+ASSERT t4 = rewrite(t3, R3f, P1);
+
+ASSERT t5 = rewriteTop(R3f, a1(t3));
+
+ASSERT test = (t1=t2);
+ASSERT test2 = (t2=t3);
+ASSERT test3 = r3fpat(a1(t3));
+ASSERT test4 = (t5 = a1(t3));
+ASSERT test5 = (replace1(t3, t5) = t3);"""
