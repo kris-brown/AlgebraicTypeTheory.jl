@@ -1,6 +1,8 @@
 # AlgebraicTypeTheory.jl
 So far, encoding material from [this tutorial](http://www.jonmsterling.com/pdfs/algebraic-type-theory-tutorial.pdf) and [this paper](https://arxiv.org/abs/1902.08848) by Jonathan Sterling.
 
+NOTE: this library is on hold due to working on a prerequisite problem, as described in the README of [this repo](https://github.com/kris-brown/SMT_term_rewriting). If unification modulo the axioms of a GAT can be satisfactorily resolved, then I can return to this.
+
 ## Goals
 
 - [x] To experiment with ideas that might be useful for [Catlab.jl](https://epatters.github.io/Catlab.jl/latest/).
@@ -9,7 +11,7 @@ So far, encoding material from [this tutorial](http://www.jonmsterling.com/pdfs/
 
 - [x] To *instantiate* theories using Julia types and functions, so that terms of the theory can be concretely evaluated.
 
-- [ \ ] To use a theory to rewrite terms of that theory in a normal form.
+- [  ] To use a theory to rewrite terms of that theory in a normal form.
 
 - [  ] Test (by exhaustive or random search) that instances of theories satisfy their axioms
 

@@ -1,2 +1,4 @@
 # AlgebraicTypeTheory.jl
 Encoding material from [this tutorial](http://www.jonmsterling.com/pdfs/algebraic-type-theory-tutorial.pdf) and [this paper](https://arxiv.org/abs/1902.08848) by Jonathan Sterling. Experimentation with ideas that might be useful for [Catlab.jl](https://epatters.github.io/Catlab.jl/latest/). More documentation [here](https://kris-brown.github.io/AlgebraicTypeTheory.jl/dev).
+
+NOTE: this library is on hold due to working on a prerequisite problem, as described in the README of [this repo](https://github.com/kris-brown/SMT_term_rewriting). If unification modulo the axioms of a GAT can be satisfactorily resolved, then I can return to this.
